@@ -12,13 +12,13 @@ The following parameters are expected on the standard input:
 - Heuristic flag (0: false, otherwise true)
 - Maximum number of choices at each step (> 0)
 
-The path to the list of words to be used by the program is expected as an argument. In the list, each word must be written in uppercase (no accentuated characters allowed), one word per line.
+The path to the list of words to be used by the program is expected as an argument. In the list, each word must be written in lowercase or uppercase (no space or special character allowed), one word per line.
 
 #### Example (program executed under Linux)
 
-$ echo 10 15 8 1 0 1 3 | crossword_gen my_words.txt
+$ echo 10 15 25 1 0 0 2 | crossword_gen my_words.txt
 
-Means "Generate a 10x15 crossword, with 8 black squares at most, enable black squares symmetry, disable linear blacks, enable heuristic, start with a maximum of 3 choices at each step. Use the file my_words.txt as the list of words."
+Means "Generate a 10x15 crossword, with 25 black squares at most, enable black squares symmetry, disable linear blacks, disable heuristic, start with a maximum of 2 choices at each step. Use the file my_words.txt as the list of words."
 
 The program generates a trie from the list of words provided. The crossword is generated cell by cell, in a row scan way. At each step the program determines the list of possible letters and if a black square can be placed from the current horizontal and vertical nodes in the trie.
 

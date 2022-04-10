@@ -28,6 +28,6 @@ When the Black squares symmetry flag is true, the program will ensure black squa
 
 When the Linear blacks flag is true, the program will try to put a black square at most every (Number of rows \* Number of colums)/(Maximum number of black squares) cells. It means in this case the program may miss valid solutions. Otherwise a full search is always performed.
 
-When the Heuristic flag is true, the program will sort the list of possible letters at each cell using their frequency of usage. Otherwise a shuffle of those letters is performed.
+When the Heuristic flag is true, the program will sort the list of possible choices at each cell using their frequency of usage. Otherwise a shuffle of those choices is performed.
 
 The program will use the value provided for Maximum number of choices at each step to limit the size of the search tree. If it is impossible to generate a crossword with the initial value provided for this parameter, then it is incremented and the search starts again until a solution is found.

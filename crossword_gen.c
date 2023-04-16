@@ -198,7 +198,8 @@ static void expected_parameters(int cells_max) {
 	fputs("Parameters expected on the standard input:\n", stderr);
 	fputs("- Number of rows (> 0)\n", stderr);
 	fprintf(stderr, "- Number of columns (>= Number of rows, Number of cells <= %d)\n", cells_max);
-	fputs("- Maximum number of black squares (>= 0, <= Number of cells)\n", stderr);
+	fputs("- Minimum number of black squares (>= 0)\n", stderr);
+	fputs("- Maximum number of black squares (>= Minimum number of black squares, <= Number of cells)\n", stderr);
 	fputs("- Options (= sum of the below flags)\n", stderr);
 	fputs("   - Black squares symmetry (0: disabled, 1: enabled)\n", stderr);
 	fputs("   - Linear blacks (0: disabled, 2: enabled)\n", stderr);

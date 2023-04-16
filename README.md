@@ -25,7 +25,7 @@ Means "Generate a 10x15 crossword, with 10 black squares at least, 25 black squa
 
 The program generates a trie from the list of words provided. The crossword is generated cell by cell, in a row scan way. At each step the program determines the list of possible letters and if a black square can be placed from the current horizontal and vertical nodes in the trie.
 
-When a valid solution is found, the current number of black squares becomes the new maximum. If the new maximum is less than or equal to the minimum number of black squares then the program terminates, otherwise another solution is searched using the new maximum. A solution is valid if all the words found are in the list of words (including one-letter words), and there is no duplicate words on the grid.
+When a valid solution is found, the current number of black squares becomes the new maximum. If the new maximum is less than the minimum number of black squares then the program terminates, otherwise another solution is searched using the new maximum. A solution is valid if all the words found are in the list of words (including one-letter words), and there is no duplicate words on the grid.
 
 When the Black squares symmetry flag is enabled, the program will ensure black squares are placed respecting the 180-degree rotational symmetry constraint. Otherwise there is no constraint on the placement of black squares.
 

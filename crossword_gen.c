@@ -530,7 +530,7 @@ static int solve_grid(cell_t *cell) {
 							--blacks_n3;
 						}
 					}
-					if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (cell->row == 0 && cell->col == 0) || (double)blacks_n1/(cell->row*cols_n+cell->col) <= blacks_ratio) && (!connected_whites || are_whites_connected(cell, cell_sym180, whites_n, '#'))) {
+					if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (double)blacks_n1/(cell->row*cols_n+cell->col+1) <= blacks_ratio) && (!connected_whites || are_whites_connected(cell, cell_sym180, whites_n, '#'))) {
 						if (node_hor != node_root) {
 							--cell->letter_hor->leaves_n;
 						}

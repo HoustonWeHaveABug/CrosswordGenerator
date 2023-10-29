@@ -679,9 +679,9 @@ static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_
 	choice->letter_hor = letter_hor;
 	choice->letter_ver = letter_ver;
 	if (heuristic) {
-		hilo_multiply(choice->letter_hor->leaves_n, choice->letter_ver->leaves_n, &choice->leaves_lo, &choice->leaves_hi);
+		hilo_multiply(letter_hor->leaves_n, letter_ver->leaves_n, &choice->leaves_lo, &choice->leaves_hi);
+		choice->lens_sum = letter_hor->len_min+letter_ver->len_min+letter_hor->len_max+letter_ver->len_max;
 	}
-	choice->lens_sum = letter_hor->len_min+letter_ver->len_min+letter_hor->len_max+letter_ver->len_max;
 }
 
 static void hilo_multiply(int a, int b, int *lo, int *hi) {

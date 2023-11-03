@@ -33,7 +33,6 @@ When the Linear blacks flag is enabled, the program will try to put a black squa
 
 When the White squares connected flag is enabled, the program will ensure all white squares are connected to each other. Otherwise there is no constraint on the placement of white squares.
 
-When the Frequency heuristic is used, the program will sort the list of possible choices at each cell using their frequency of usage.
-When the Random heuristic is used, a shuffle of those choices is performed.
+When the Frequency heuristic is used, the program will sort the list of possible choices at each cell using their frequency of usage. When the Random heuristic is used, a shuffle of those choices is performed.
 
 The program will use the value provided for Maximum number of choices at each step to limit the size of the search tree. If it is impossible to generate a crossword with the initial value provided for this parameter, then it is incremented and the search starts again until a solution is found.

@@ -5,6 +5,12 @@
 #include <limits.h>
 #include "mtrand.h"
 
+typedef enum {
+	HEURISTIC_FREQUENCY,
+	HEURISTIC_RANDOM
+}
+heuristic_t;
+
 typedef struct node_s node_t;
 
 typedef struct {
@@ -51,10 +57,11 @@ static void sort_child(letter_t *, letter_t *);
 static int compare_letters(const void *, const void *);
 static void set_cell(cell_t *, int, int, letter_t *, letter_t *, int);
 static int solve_grid(cell_t *);
-static int check_letter(node_t *, node_t *, letter_t *, int, int);
+static int check_letter1(letter_t *, int, int);
+static int check_letter2(letter_t *, int, int, int, int);
 static int are_whites_connected(cell_t *, cell_t *, int, int);
 static void add_cell_to_queue(cell_t *);
-static int add_choice(letter_t *, letter_t *);
+static int add_choice(int, letter_t *, letter_t *);
 static void set_choice(choice_t *, letter_t *, letter_t *);
 static void hilo_multiply(int, int, int *, int *);
 static void hilo_add(int, int, int *, int *);
@@ -63,8 +70,9 @@ static void copy_choice(cell_t *, choice_t *);
 static int solve_grid_final(node_t *, cell_t *);
 static void free_node(node_t *);
 
-static int short_bits, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, cols_total, choices_size, *blacks_in_cols, cells_n, sym_blacks, linear_blacks, connected_whites, heuristic, unknown_cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n, overflow, queued_cells_n;
+static int short_bits, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, cols_total, choices_size, *blacks_in_cols, cells_n, sym_blacks, linear_blacks, connected_whites, unknown_cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n, overflow, queued_cells_n;
 static double blacks_ratio;
+static heuristic_t heuristic;
 static letter_t letter_root;
 static node_t *node_root;
 static cell_t *cells, **queued_cells;
@@ -82,7 +90,7 @@ int main(int argc, char *argv[]) {
 		expected_parameters(cells_max);
 		return EXIT_FAILURE;
 	}
-	if (scanf("%d%d%d%d%d%d", &rows_n, &cols_n, &blacks_min, &blacks_max, &options, &choices_max) != 6 || rows_n < 1 || rows_n > cols_n || rows_n > cells_max/cols_n || blacks_min < 0 || blacks_min > blacks_max || blacks_max > rows_n*cols_n || choices_max < 1) {
+	if (scanf("%d%d%d%d%d%u%d", &rows_n, &cols_n, &blacks_min, &blacks_max, &options, &heuristic, &choices_max) != 7 || rows_n < 1 || rows_n > cols_n || rows_n > cells_max/cols_n || blacks_min < 0 || blacks_min > blacks_max || blacks_max > rows_n*cols_n || choices_max < 1) {
 		fputs("Invalid grid settings\n", stderr);
 		expected_parameters(cells_max);
 		return EXIT_FAILURE;
@@ -164,7 +172,6 @@ int main(int argc, char *argv[]) {
 	sym_blacks = options & 1;
 	linear_blacks = options & 2;
 	connected_whites = options & 4;
-	heuristic = options & 8;
 	unknown_cells_n = cells_n;
 	choices_hi = 0;
 	symmetric = rows_n == cols_n;
@@ -201,10 +208,10 @@ static void expected_parameters(int cells_max) {
 	fputs("- Minimum number of black squares (>= 0)\n", stderr);
 	fputs("- Maximum number of black squares (>= Minimum number of black squares, <= Number of cells)\n", stderr);
 	fputs("- Options (= sum of the below flags)\n", stderr);
-	fputs("   - Black squares symmetry (0: disabled, 1: enabled)\n", stderr);
-	fputs("   - Linear blacks (0: disabled, 2: enabled)\n", stderr);
-	fputs("   - White squares connected (0: disabled, 4: enabled)\n", stderr);
-	fputs("   - Heuristic (0: disabled, 8: enabled)\n", stderr);
+	fputs("\t- Black squares symmetry (0: disabled, 1: enabled)\n", stderr);
+	fputs("\t- Linear blacks (0: disabled, 2: enabled)\n", stderr);
+	fputs("\t- White squares connected (0: disabled, 4: enabled)\n", stderr);
+	fputs("- Heuristic (0: frequency, 1: random, > 1: none)\n", stderr);
 	fputs("- Maximum number of choices at each step (> 0)\n", stderr);
 	fflush(stderr);
 }
@@ -436,33 +443,36 @@ static int solve_grid(cell_t *cell) {
 			if (symmetric && cell->row > cell->col) {
 				for (; i < node_hor->letters_n && node_hor->letters[i].symbol < symbol_sym90; ++i);
 			}
-			for (j = 0; i < node_hor->letters_n; ++i) {
-				if (!check_letter(node_hor, node_ver, node_hor->letters+i, hor_whites_max, hor_whites_min)) {
-					continue;
-				}
-				for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
-				if (j < node_ver->letters_n && node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
-					if (check_letter(node_hor, node_ver, node_ver->letters+j, ver_whites_max, ver_whites_min)) {
-						if (node_ver->letters[j].symbol != '#') {
-							if ((cell->symbol == '.' || cell->symbol == '*') && !add_choice(node_hor->letters+i, node_ver->letters+j)) {
-								return -1;
-							}
-						}
-						else {
-							if ((cell->symbol == '.' || cell->symbol == '#') && !add_choice(node_hor->letters+i, node_ver->letters+j)) {
-								return -1;
-							}
-						}
+			if (node_hor != node_ver) {
+				for (j = 0; i < node_hor->letters_n; ++i) {
+					if (!check_letter1(node_hor->letters+i, hor_whites_max, hor_whites_min)) {
+						continue;
 					}
-					++j;
+					for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
+					if (j == node_ver->letters_n) {
+						break;
+					}
+					if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
+						if (check_letter1(node_ver->letters+j, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
+							return -1;
+						}
+						++j;
+					}
+				}
+			}
+			else {
+				for (; i < node_hor->letters_n; ++i) {
+					if (check_letter2(node_ver->letters+i, hor_whites_max, hor_whites_min, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+i)) {
+						return -1;
+					}
 				}
 			}
 			choices_n = choices_hi-choices_lo;
 			if (choices_n > 1) {
-				if (heuristic) {
+				if (heuristic == HEURISTIC_FREQUENCY) {
 					qsort(choices+choices_lo, (size_t)choices_n, sizeof(choice_t), compare_choices);
 				}
-				else {
+				else if (heuristic == HEURISTIC_RANDOM) {
 					for (i = choices_lo; i < choices_hi; ++i) {
 						choice_t choice_tmp;
 						j = (int)emtrand((unsigned long)(choices_hi-i))+i;
@@ -593,8 +603,12 @@ static int solve_grid(cell_t *cell) {
 	return blacks_min >= blacks_max;
 }
 
-static int check_letter(node_t *node_hor, node_t *node_ver, letter_t *letter, int whites_max, int whites_min) {
-	return ((node_hor != node_ver && letter->leaves_n > 0) || letter->leaves_n > 1) && letter->len_min <= whites_max && letter->len_max >= whites_min;
+static int check_letter1(letter_t *letter, int whites_max, int whites_min) {
+	return letter->leaves_n > 0 && letter->len_min <= whites_max && letter->len_max >= whites_min;
+}
+
+static int check_letter2(letter_t *letter, int hor_whites_max, int hor_whites_min, int ver_whites_max, int ver_whites_min) {
+	return letter->leaves_n > 1 && letter->len_min <= hor_whites_max && letter->len_max >= hor_whites_min && letter->len_min <= ver_whites_max && letter->len_max >= ver_whites_min;
 }
 
 static int are_whites_connected(cell_t *cell, cell_t *cell_sym180, int target, int symbol) {
@@ -659,7 +673,17 @@ static void add_cell_to_queue(cell_t *cell) {
 	}
 }
 
-static int add_choice(letter_t *letter_hor, letter_t *letter_ver) {
+static int add_choice(int cell_symbol, letter_t *letter_hor, letter_t *letter_ver) {
+	if (letter_hor->symbol != '#') {
+		if (cell_symbol == '#') {
+			return 1;
+		}
+	}
+	else {
+		if (cell_symbol == '*') {
+			return 1;
+		}
+	}
 	if (choices_hi == choices_size) {
 		choice_t *choices_tmp = realloc(choices, sizeof(choice_t)*(size_t)(choices_hi+1));
 		if (!choices_tmp) {
@@ -678,7 +702,7 @@ static int add_choice(letter_t *letter_hor, letter_t *letter_ver) {
 static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_ver) {
 	choice->letter_hor = letter_hor;
 	choice->letter_ver = letter_ver;
-	if (heuristic) {
+	if (heuristic == HEURISTIC_FREQUENCY) {
 		hilo_multiply(letter_hor->leaves_n, letter_ver->leaves_n, &choice->leaves_lo, &choice->leaves_hi);
 		choice->lens_sum = letter_hor->len_min+letter_ver->len_min+letter_hor->len_max+letter_ver->len_max;
 	}

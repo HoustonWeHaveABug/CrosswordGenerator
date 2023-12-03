@@ -82,7 +82,7 @@ static void hilo_multiply(int, int, int *, int *);
 static void hilo_add(int, int, int *, int *);
 static int compare_choices(const void *, const void *);
 static void copy_choice(cell_t *, choice_t *);
-static int solve_grid_final(node_t *, cell_t *);
+static int solve_grid_final(letter_t *, cell_t *);
 static void free_node(node_t *);
 
 static int short_bits, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, len_max_with_black, cols_total, choices_size, *blacks_in_cols, cells_n, unknown_cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n, overflow, queued_cells_n;
@@ -368,7 +368,7 @@ static void sort_child(letter_t *letter, letter_t *child) {
 		++child->len_max;
 	}
 	else {
-		child->leaves_n = letter != &letter_root ? 1:2;
+		child->leaves_n = letter != &letter_root ? 1:blacks_max*2+rows_n+cols_n;
 		child->len_min = 0;
 		child->len_max = 0;
 	}
@@ -451,12 +451,6 @@ static int solve_grid(cell_t *cell) {
 				hor_whites_min = cell->sym180->col-cell_sym->col;
 				for (; cell_sym->col >= 0 && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
 				hor_whites_max = cell->sym180->col-cell_sym->col;
-				if (cell->sym180 > cell) {
-					unknown_cells_n -= 2;
-				}
-				else if (cell->sym180 == cell) {
-					--unknown_cells_n;
-				}
 			}
 			else {
 				ver_whites_max = cell->ver_whites_max;
@@ -496,6 +490,14 @@ static int solve_grid(cell_t *cell) {
 					if (check_letter2(node_ver->letters+i, hor_whites_max, hor_whites_min, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+i)) {
 						return -1;
 					}
+				}
+			}
+			if (sym_blacks) {
+				if (cell->sym180 > cell) {
+					unknown_cells_n -= 2;
+				}
+				else if (cell->sym180 == cell) {
+					--unknown_cells_n;
 				}
 			}
 			choices_n = choices_hi-choices_lo;
@@ -572,12 +574,8 @@ static int solve_grid(cell_t *cell) {
 						}
 					}
 					if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (double)blacks_n1/cell->pos <= blacks_ratio) && (!connected_whites || are_whites_connected(cell, whites_n, SYMBOL_BLACK))) {
-						if (node_hor != node_root) {
-							--cell->letter_hor->leaves_n;
-						}
-						if (node_ver != node_root) {
-							--cell->letter_ver->leaves_n;
-						}
+						--cell->letter_hor->leaves_n;
+						--cell->letter_ver->leaves_n;
 						if (!sym_blacks || cell->sym180 >= cell) {
 							cell->symbol = SYMBOL_BLACK;
 						}
@@ -591,12 +589,8 @@ static int solve_grid(cell_t *cell) {
 						if (!sym_blacks || cell->sym180 >= cell) {
 							cell->symbol = SYMBOL_UNKNOWN;
 						}
-						if (node_ver != node_root) {
-							++cell->letter_ver->leaves_n;
-						}
-						if (node_hor != node_root) {
-							++cell->letter_hor->leaves_n;
-						}
+						++cell->letter_ver->leaves_n;
+						++cell->letter_hor->leaves_n;
 					}
 					if (sym_blacks) {
 						if (cell->sym180 > cell) {
@@ -623,10 +617,10 @@ static int solve_grid(cell_t *cell) {
 			}
 			return r;
 		}
-		return solve_grid_final(node_hor, cell+2);
+		return solve_grid_final(node_hor->letters, cell+2);
 	}
 	if (cell->col < cols_n) {
-		return solve_grid_final((cell-cols_total)->letter_ver->next, cell+1);
+		return solve_grid_final((cell-cols_total)->letter_ver->next->letters, cell+1);
 	}
 	blacks_max = blacks_n1;
 	puts("SOLUTION FOUND");
@@ -655,13 +649,9 @@ static int are_whites_connected(cell_t *cell, int target, int symbol) {
 		cell_first = NULL;
 		for (i = 1; i <= rows_n; ++i) {
 			int j;
-			for (j = 1; j <= cols_n; ++j) {
-				if (cells[i*cols_total+j].symbol != SYMBOL_BLACK) {
-					cell_first = cells+i*cols_total+j;
-					break;
-				}
-			}
-			if (cell_first) {
+			for (j = 1; j <= cols_n && cells[i*cols_total+j].symbol == SYMBOL_BLACK; ++j);
+			if (j <= cols_n) {
+				cell_first = cells+i*cols_total+j;
 				break;
 			}
 		}
@@ -740,7 +730,18 @@ static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_
 }
 
 static void hilo_multiply(int a, int b, int *lo, int *hi) {
-	int a1 = a & short_max, a2 = a >> short_bits, b1 = b & short_max, b2 = b >> short_bits, m12 = a1*b2, m21 = a2*b1, carry1, carry2;
+	int a1, a2, b1, b2, m12, m21, carry1, carry2;
+	if (a <= INT_MAX/b) {
+		*lo = a*b;
+		*hi = 0;
+		return;
+	}
+	a1 = a & short_max;
+	a2 = a >> short_bits;
+	b1 = b & short_max;
+	b2 = b >> short_bits;
+	m12 = a1*b2;
+	m21 = a2*b1;
 	hilo_add(a1*b1, (m12 & short_max) << short_bits, lo, &carry1);
 	hilo_add(*lo, (m21 & short_max) << short_bits, lo, &carry2);
 	*hi = carry1+carry2+(m12 >> short_bits)+(m21 >> short_bits)+a2*b2;
@@ -748,14 +749,13 @@ static void hilo_multiply(int a, int b, int *lo, int *hi) {
 
 static void hilo_add(int a, int b, int *lo, int *hi) {
 	int delta = INT_MAX-b;
-	if (a > delta) {
-		*lo = a-delta-1;
-		*hi = 1;
-	}
-	else {
+	if (a <= delta) {
 		*lo = a+b;
 		*hi = 0;
+		return;
 	}
+	*lo = a-delta-1;
+	*hi = 1;
 }
 
 static int compare_choices(const void *a, const void *b) {
@@ -777,16 +777,12 @@ static void copy_choice(cell_t *cell, choice_t *choice) {
 	cell->letter_ver = choice->letter_ver;
 }
 
-static int solve_grid_final(node_t *node, cell_t *cell) {
-	if (node->letters[0].symbol == SYMBOL_BLACK && node->letters[0].leaves_n > 0) {
+static int solve_grid_final(letter_t *letter, cell_t *cell) {
+	if (letter->symbol == SYMBOL_BLACK && letter->leaves_n > 0) {
 		int r;
-		if (node != node_root) {
-			--node->letters[0].leaves_n;
-		}
+		--letter->leaves_n;
 		r = solve_grid(cell);
-		if (node != node_root) {
-			++node->letters[0].leaves_n;
-		}
+		++letter->leaves_n;
 		return r;
 	}
 	return 0;

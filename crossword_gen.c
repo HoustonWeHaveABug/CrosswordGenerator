@@ -504,9 +504,7 @@ static int solve_grid(cell_t *cell) {
 			if (choices_n > 1) {
 				if (choices_n > choices_max) {
 					choices_hi = choices_lo+choices_max;
-					if (!overflow) {
-						overflow = 1;
-					}
+					overflow |= 1;
 				}
 				if (heuristic == HEURISTIC_FREQUENCY) {
 					qsort(choices+choices_lo, (size_t)choices_n, sizeof(choice_t), compare_choices);
@@ -523,7 +521,7 @@ static int solve_grid(cell_t *cell) {
 			}
 			symmetric_bak = symmetric;
 			blacks_in_col = blacks_in_cols[cell->col];
-			r_white = connected_whites ? -1:1;
+			r_white = -1;
 			r = 0;
 			for (i = choices_lo; i < choices_hi && !r; ++i) {
 				copy_choice(cell, choices+i);
@@ -725,7 +723,7 @@ static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_
 	choice->letter_ver = letter_ver;
 	if (heuristic == HEURISTIC_FREQUENCY) {
 		hilo_multiply(letter_hor->leaves_n, letter_ver->leaves_n, &choice->leaves_lo, &choice->leaves_hi);
-		choice->lens_sum = letter_hor->len_min+letter_ver->len_min+letter_hor->len_max+letter_ver->len_max;
+		choice->lens_sum = letter_hor->len_min+letter_hor->len_max+letter_ver->len_min+letter_ver->len_max;
 	}
 }
 

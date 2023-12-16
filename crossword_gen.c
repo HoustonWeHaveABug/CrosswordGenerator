@@ -56,7 +56,6 @@ typedef struct {
 	letter_t *letter_ver;
 	int leaves_lo;
 	int leaves_hi;
-	int lens_sum;
 }
 choice_t;
 
@@ -96,6 +95,7 @@ static choice_t *choices;
 int main(int argc, char *argv[]) {
 	int cells_max, options, r, j, i;
 	FILE *fd;
+	time_t mtseed;
 	short_bits = (int)sizeof(int)*HALF_BITS;
 	cells_max = 1 << short_bits;
 	short_max = cells_max-1;
@@ -201,10 +201,11 @@ int main(int argc, char *argv[]) {
 	blacks_ratio = (double)blacks_max/cells_n;
 	whites_n = 0;
 	++blacks_max;
-	smtrand((unsigned long)time(NULL));
+	mtseed = time(NULL);
 	do {
 		printf("CHOICES %d\n", choices_max);
 		fflush(stdout);
+		smtrand((unsigned long)mtseed);
 		overflow = 0;
 		r = solve_grid(cells+cols_total+1);
 		if (overflow) {
@@ -594,20 +595,9 @@ static int solve_grid(cell_t *cell) {
 	if (cell->col < cols_n) {
 		return solve_grid_final((cell-cols_total)->letter_ver->next->letters, cell+1);
 	}
+	blacks_ratio = (double)(blacks_n1-1)/cells_n;
 	blacks_max = blacks_n1;
-	printf("BLACK SQUARES %d", blacks_n1);
-	if (blacks_n2 > 0) {
-		printf("+%d", blacks_n2);
-		if (blacks_n3 > 0) {
-			printf("/%d", blacks_n3);
-		}
-	}
-	else {
-		if (blacks_n3 > 0) {
-			printf("+0/%d", blacks_n3);
-		}
-	}
-	puts("");
+	printf("BLACK SQUARES %d\n", blacks_n1);
 	for (i = 1; i <= rows_n; ++i) {
 		int j;
 		putchar(cells[i*cols_total+1].symbol);
@@ -717,7 +707,6 @@ static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_
 	choice->letter_ver = letter_ver;
 	if (heuristic == HEURISTIC_FREQUENCY) {
 		hilo_multiply(letter_hor->leaves_n, letter_ver->leaves_n, &choice->leaves_lo, &choice->leaves_hi);
-		choice->lens_sum = letter_hor->len_min+letter_hor->len_max+letter_ver->len_min+letter_ver->len_max;
 	}
 }
 
@@ -757,9 +746,6 @@ static int compare_choices(const void *a, const void *b) {
 	}
 	if (choice_a->leaves_lo != choice_b->leaves_lo) {
 		return choice_b->leaves_lo-choice_a->leaves_lo;
-	}
-	if (choice_a->lens_sum != choice_b->lens_sum) {
-		return choice_b->lens_sum-choice_a->lens_sum;
 	}
 	return choice_a->letter_hor->symbol-choice_b->letter_hor->symbol;
 }

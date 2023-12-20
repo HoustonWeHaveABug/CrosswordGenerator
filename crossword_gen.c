@@ -477,10 +477,6 @@ static int solve_grid(cell_t *cell) {
 			}
 			choices_n = choices_hi-choices_lo;
 			if (choices_n > 1) {
-				if (choices_n > choices_max) {
-					choices_hi = choices_lo+choices_max;
-					overflow |= 1;
-				}
 				if (heuristic == HEURISTIC_FREQUENCY) {
 					qsort(choices+choices_lo, (size_t)choices_n, sizeof(choice_t), compare_choices);
 				}
@@ -498,7 +494,7 @@ static int solve_grid(cell_t *cell) {
 			blacks_in_col = blacks_in_cols[cell->col];
 			r_white = -1;
 			r = 0;
-			for (i = choices_lo; i < choices_hi && !r; ++i) {
+			for (i = choices_lo, j = 0; i < choices_hi && j < choices_max && !r; ++i) {
 				copy_choice(cell, choices+i);
 				if (symmetric_bak && cell->row > cell->col) {
 					symmetric = cell->letter_hor->symbol == cell->sym90->symbol;
@@ -527,6 +523,7 @@ static int solve_grid(cell_t *cell) {
 							cell->symbol = sym_blacks && cell->sym180 < cell ? SYMBOL_WHITE:SYMBOL_UNKNOWN;
 							++cell->letter_ver->leaves_n;
 							++cell->letter_hor->leaves_n;
+							++j;
 						}
 						if (connected_whites) {
 							whites_n -= sym_blacks && cell->sym180 > cell ? 2:1;
@@ -564,6 +561,7 @@ static int solve_grid(cell_t *cell) {
 						}
 						++cell->letter_ver->leaves_n;
 						++cell->letter_hor->leaves_n;
+						++j;
 					}
 					if (sym_blacks) {
 						if (cell->sym180 > cell) {
@@ -579,6 +577,7 @@ static int solve_grid(cell_t *cell) {
 			}
 			blacks_in_cols[cell->col] = blacks_in_col;
 			symmetric = symmetric_bak;
+			overflow |= choices_n > choices_max;
 			choices_hi = choices_lo;
 			if (sym_blacks) {
 				if (cell->sym180 > cell) {

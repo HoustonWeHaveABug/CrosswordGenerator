@@ -483,7 +483,7 @@ static int solve_grid(cell_t *cell) {
 				else if (heuristic == HEURISTIC_RANDOM) {
 					for (i = choices_lo; i < choices_hi; ++i) {
 						choice_t choice_tmp;
-						j = (int)emtrand((unsigned long)(choices_lo+choices_n-i))+i;
+						j = (int)emtrand((unsigned long)(choices_hi-i))+i;
 						choice_tmp = choices[i];
 						choices[i] = choices[j];
 						choices[j] = choice_tmp;

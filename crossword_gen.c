@@ -89,7 +89,7 @@ static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
 static node_t *node_root;
-static cell_t *cells, **queued_cells;
+static cell_t *cells, **queued_cells, *first_white;
 static choice_t *choices;
 
 int main(int argc, char *argv[]) {
@@ -504,6 +504,9 @@ static int solve_grid(cell_t *cell) {
 					blacks_n2 += blacks_in_cols[cell->col]-blacks_in_col;
 					if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
 						if (connected_whites) {
+							if (whites_n == 0) {
+								first_white = cell;
+							}
 							whites_n += sym_blacks && cell->sym180 > cell ? 2:1;
 							if (r_white == -1) {
 								r_white = are_whites_connected(cell, whites_n, SYMBOL_WHITE);
@@ -619,39 +622,21 @@ static int check_letter2(letter_t *letter, int hor_whites_max, int hor_whites_mi
 
 static int are_whites_connected(cell_t *cell, int target, int symbol) {
 	int i;
-	cell_t *cell_first;
-	if (sym_blacks && cell->sym180 < cell) {
+	if (target == 0 || (sym_blacks && cell->sym180 < cell)) {
 		return 1;
-	}
-	if (symbol == SYMBOL_WHITE) {
-		cell_first = cell;
-	}
-	else {
-		cell_first = NULL;
-		for (i = 1; i <= rows_n; ++i) {
-			int j;
-			for (j = 1; j <= cols_n && cells[i*cols_total+j].symbol == SYMBOL_BLACK; ++j);
-			if (j <= cols_n) {
-				cell_first = cells+i*cols_total+j;
-				break;
-			}
-		}
-		if (!cell_first) {
-			return 1;
-		}
 	}
 	cell->symbol = symbol;
 	if (sym_blacks && cell->sym180 > cell) {
 		cell->sym180->symbol = symbol;
 	}
 	queued_cells_n = 0;
-	add_cell_to_queue(cell_first);
+	add_cell_to_queue(symbol == SYMBOL_WHITE ? cell:first_white);
 	for (i = 0; i < queued_cells_n; ++i) {
 		if (queued_cells[i]->symbol != SYMBOL_UNKNOWN) {
-			--target;
-		}
-		if (target == 0) {
-			break;
+			target = symbol == SYMBOL_WHITE && queued_cells[i] < cell ? 0:target-1;
+			if (target == 0) {
+				break;
+			}
 		}
 		add_cell_to_queue(queued_cells[i]-1);
 		add_cell_to_queue(queued_cells[i]-cols_total);

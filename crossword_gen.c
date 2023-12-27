@@ -639,7 +639,7 @@ static int check_letter2(letter_t *letter, int hor_whites_max, int hor_whites_mi
 
 static int are_whites_connected(cell_t *cell, int target) {
 	int i;
-	if (target == 0 || (sym_blacks && cell->sym180 < cell)) {
+	if (target == 0 || (sym_blacks && blacks_n1 > blacks_n3)) {
 		return 1;
 	}
 	if (cell != first_white) {

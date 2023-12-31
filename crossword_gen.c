@@ -158,8 +158,8 @@ int main(int argc, char *argv[]) {
 		set_cell(cells+i*cols_total+j, rows_n, j-1, NULL, NULL, SYMBOL_BLACK);
 	}
 	set_cell(cells+i*cols_total+j, rows_n, cols_n, NULL, NULL, SYMBOL_BLACK);
-	for (i = rows_n; i > 0; --i) {
-		for (j = cols_n; j > 0; --j) {
+	for (i = rows_n; i; --i) {
+		for (j = cols_n; j; --j) {
 			set_cell_whites_max(cells+i*cols_total+j);
 		}
 	}
@@ -255,7 +255,7 @@ static int load_dictionary(FILE *fd) {
 			++len;
 		}
 		else if (c == '\n') {
-			if (((blacks_max > 0 && len <= cols_n) || len == rows_n || len == cols_n) && !new_word(symbols, len)) {
+			if (((blacks_max && len <= cols_n) || len == rows_n || len == cols_n) && !new_word(symbols, len)) {
 				free(symbols);
 				return 0;
 			}
@@ -271,12 +271,12 @@ static int load_dictionary(FILE *fd) {
 		c = fgetc(fd);
 	}
 	free(symbols);
-	if (len > 0) {
+	if (len) {
 		fputs("Unexpected end of dictionary\n", stderr);
 		fflush(stderr);
 		return 0;
 	}
-	return blacks_max == 0 || get_letter(node_root, SYMBOL_BLACK) || new_letter(node_root, SYMBOL_BLACK);
+	return !blacks_max || get_letter(node_root, SYMBOL_BLACK) || new_letter(node_root, SYMBOL_BLACK);
 }
 
 static int new_word(int *symbols, int len) {
@@ -306,7 +306,7 @@ static letter_t *get_letter(node_t *node, int symbol) {
 
 static letter_t *new_letter(node_t *node, int symbol) {
 	letter_t *letter;
-	if (node->letters_n > 0) {
+	if (node->letters_n) {
 		letter_t *letters = realloc(node->letters, sizeof(letter_t)*(size_t)(node->letters_n+1));
 		if (!letters) {
 			fputs("Could not reallocate memory for node->letters\n", stderr);
@@ -353,7 +353,7 @@ static void sort_node(letter_t *letter, node_t *node) {
 	letter->leaves_n = 0;
 	letter->len_min = cols_n;
 	letter->len_max = 0;
-	if (node->letters_n > 0) {
+	if (node->letters_n) {
 		int i;
 		for (i = node->letters_n; i--; ) {
 			sort_child(letter, node->letters+i);
@@ -383,8 +383,7 @@ static void sort_child(letter_t *letter, letter_t *child) {
 }
 
 static int compare_letters(const void *a, const void *b) {
-	const letter_t *letter_a = (const letter_t *)a, *letter_b = (const letter_t *)b;
-	return letter_a->symbol-letter_b->symbol;
+	return ((const letter_t *)a)->symbol-((const letter_t *)b)->symbol;
 }
 
 static void set_cell(cell_t *cell, int row, int col, letter_t *letter_hor, letter_t *letter_ver, int symbol) {
@@ -502,7 +501,7 @@ static int solve_grid(cell_t *cell) {
 					blacks_n2 += blacks_in_cols[cell->col]-blacks_in_col;
 					if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
 						if (connected_whites) {
-							if (whites_n == 0) {
+							if (!whites_n) {
 								first_white = cell;
 							}
 							if (sym_blacks) {
@@ -632,7 +631,7 @@ static int solve_grid(cell_t *cell) {
 }
 
 static int check_letter1(letter_t *letter, int whites_max, int whites_min) {
-	return letter->leaves_n > 0 && letter->len_min <= whites_max && letter->len_max >= whites_min;
+	return letter->leaves_n && letter->len_min <= whites_max && letter->len_max >= whites_min;
 }
 
 static int check_letter2(letter_t *letter, int hor_whites_max, int hor_whites_min, int ver_whites_max, int ver_whites_min) {
@@ -641,7 +640,7 @@ static int check_letter2(letter_t *letter, int hor_whites_max, int hor_whites_mi
 
 static int are_whites_connected(int target) {
 	int i;
-	if (target == 0 || (sym_blacks && blacks_n1 > blacks_n3+2)) {
+	if (!target || (sym_blacks && blacks_n1 > blacks_n3+2)) {
 		return 1;
 	}
 	queued_cells_n = 0;
@@ -649,19 +648,19 @@ static int are_whites_connected(int target) {
 	for (i = 0; i < queued_cells_n; ++i) {
 		if (queued_cells[i]->symbol != SYMBOL_UNKNOWN) {
 			--target;
-			if (target == 0) {
+			if (!target) {
 				break;
 			}
 		}
-		add_cell_to_queue(queued_cells[i]-1);
-		add_cell_to_queue(queued_cells[i]-cols_total);
 		add_cell_to_queue(queued_cells[i]+1);
 		add_cell_to_queue(queued_cells[i]+cols_total);
+		add_cell_to_queue(queued_cells[i]-1);
+		add_cell_to_queue(queued_cells[i]-cols_total);
 	}
 	for (i = queued_cells_n; i--; ) {
 		queued_cells[i]->visited = 0;
 	}
-	return target == 0;
+	return !target;
 }
 
 static void add_cell_to_queue(cell_t *cell) {
@@ -751,7 +750,7 @@ static void copy_choice(cell_t *cell, choice_t *choice) {
 }
 
 static int solve_grid_final(letter_t *letter, cell_t *cell) {
-	if (letter->symbol == SYMBOL_BLACK && letter->leaves_n > 0) {
+	if (letter->symbol == SYMBOL_BLACK && letter->leaves_n) {
 		int r;
 		--letter->leaves_n;
 		r = solve_grid(cell);
@@ -762,7 +761,7 @@ static int solve_grid_final(letter_t *letter, cell_t *cell) {
 }
 
 static void free_node(node_t *node) {
-	if (node->letters_n > 0) {
+	if (node->letters_n) {
 		int i;
 		for (i = node->letters_n; i--; ) {
 			if (node->letters[i].next != node_root) {

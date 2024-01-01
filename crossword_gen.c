@@ -54,8 +54,8 @@ struct cell_s {
 typedef struct {
 	letter_t *letter_hor;
 	letter_t *letter_ver;
-	int leaves_lo;
 	int leaves_hi;
+	int leaves_lo;
 }
 choice_t;
 
@@ -68,13 +68,13 @@ static node_t *new_node(void);
 static void sort_node(letter_t *, node_t *);
 static void sort_child(letter_t *, letter_t *);
 static int compare_letters(const void *, const void *);
+static void set_row(cell_t *, int, letter_t *, letter_t *, int);
 static void set_cell(cell_t *, int, int, letter_t *, letter_t *, int);
 static void set_cell_whites_max(cell_t *);
 static int solve_grid(cell_t *);
+static int solve_grid_inter(node_t *, cell_t *);
 static int check_letter1(letter_t *, int, int);
 static int check_letter2(letter_t *, int, int, int, int);
-static int are_whites_connected(int);
-static void add_cell_to_queue(cell_t *);
 static int add_choice(int, letter_t *, letter_t *);
 static void set_choice(choice_t *, letter_t *, letter_t *);
 static void hilo_multiply(int, int, int *, int *);
@@ -82,9 +82,11 @@ static void hilo_add(int, int, int *, int *);
 static int compare_choices(const void *, const void *);
 static void copy_choice(cell_t *, choice_t *);
 static int solve_grid_final(letter_t *, cell_t *);
+static int are_whites_connected(int);
+static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int short_bits, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, len_max_with_black, cols_total, choices_size, *blacks_in_cols, cells_n, unknown_cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n, overflow, queued_cells_n;
+static int short_bits, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, cells_n, unknown_cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n, overflow, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -93,7 +95,7 @@ static cell_t *cells, **queued_cells, *first_white;
 static choice_t *choices;
 
 int main(int argc, char *argv[]) {
-	int cells_max, options, r, j, i;
+	int cells_max, options, r, i;
 	FILE *fd;
 	time_t mtseed;
 	short_bits = (int)sizeof(int)*HALF_BITS;
@@ -132,7 +134,6 @@ int main(int argc, char *argv[]) {
 	letter_root.symbol = SYMBOL_BLACK;
 	letter_root.next = node_root;
 	sort_node(&letter_root, node_root);
-	len_max_with_black = letter_root.len_max+1;
 	cols_total = cols_n+2;
 	cells = malloc(sizeof(cell_t)*(size_t)((rows_n+2)*cols_total));
 	if (!cells) {
@@ -141,24 +142,13 @@ int main(int argc, char *argv[]) {
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
-	set_cell(cells, -1, -1, NULL, NULL, SYMBOL_BLACK);
-	for (j = 1; j <= cols_n; ++j) {
-		set_cell(cells+j, -1, j-1, NULL, &letter_root, SYMBOL_BLACK);
-	}
-	set_cell(cells+j, -1, cols_n, NULL, NULL, SYMBOL_BLACK);
+	set_row(cells, -1, NULL, &letter_root, SYMBOL_BLACK);
 	for (i = 1; i <= rows_n; ++i) {
-		set_cell(cells+i*cols_total, i-1, -1, &letter_root, NULL, SYMBOL_BLACK);
-		for (j = 1; j <= cols_n; ++j) {
-			set_cell(cells+i*cols_total+j, i-1, j-1, NULL, NULL, SYMBOL_UNKNOWN);
-		}
-		set_cell(cells+i*cols_total+j, i-1, cols_n, NULL, NULL, SYMBOL_BLACK);
+		set_row(cells+i*cols_total, i-1, &letter_root, NULL, SYMBOL_UNKNOWN);
 	}
-	set_cell(cells+i*cols_total, rows_n, -1, NULL, NULL, SYMBOL_BLACK);
-	for (j = 1; j <= cols_n; ++j) {
-		set_cell(cells+i*cols_total+j, rows_n, j-1, NULL, NULL, SYMBOL_BLACK);
-	}
-	set_cell(cells+i*cols_total+j, rows_n, cols_n, NULL, NULL, SYMBOL_BLACK);
+	set_row(cells+i*cols_total, rows_n, NULL, NULL, SYMBOL_BLACK);
 	for (i = rows_n; i; --i) {
+		int j;
 		for (j = cols_n; j; --j) {
 			set_cell_whites_max(cells+i*cols_total+j);
 		}
@@ -172,21 +162,11 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	choices_size = 1;
-	blacks_in_cols = calloc((size_t)cols_n, sizeof(int));
-	if (!blacks_in_cols) {
-		fputs("Could not allocate memory for blacks_in_cols\n", stderr);
-		fflush(stderr);
-		free(choices);
-		free(cells);
-		free_node(node_root);
-		return EXIT_FAILURE;
-	}
 	cells_n = rows_n*cols_n;
 	queued_cells = malloc(sizeof(cell_t *)*(size_t)cells_n);
 	if (!queued_cells) {
 		fputs("Could not allocate memory for queued_cells\n", stderr);
 		fflush(stderr);
-		free(blacks_in_cols);
 		free(choices);
 		free(cells);
 		free_node(node_root);
@@ -196,7 +176,7 @@ int main(int argc, char *argv[]) {
 	choices_hi = 0;
 	symmetric = rows_n == cols_n;
 	blacks_n1 = 0;
-	blacks_n2 = 0;
+	blacks_n2 = cells[1].blacks_in_col*cols_n;
 	blacks_n3 = 0;
 	blacks_ratio = (double)blacks_max/cells_n;
 	whites_n = 0;
@@ -214,7 +194,6 @@ int main(int argc, char *argv[]) {
 	}
 	while (overflow && !r);
 	free(queued_cells);
-	free(blacks_in_cols);
 	free(choices);
 	free(cells);
 	free_node(node_root);
@@ -386,6 +365,15 @@ static int compare_letters(const void *a, const void *b) {
 	return ((const letter_t *)a)->symbol-((const letter_t *)b)->symbol;
 }
 
+static void set_row(cell_t *first, int row, letter_t *letter_hor, letter_t *letter_ver, int symbol) {
+	int i;
+	set_cell(first, row, -1, letter_hor, NULL, SYMBOL_BLACK);
+	for (i = 1; i <= cols_n; ++i) {
+		set_cell(first+i, row, i-1, NULL, letter_ver, symbol);
+	}
+	set_cell(first+i, row, cols_n, NULL, NULL, SYMBOL_BLACK);
+}
+
 static void set_cell(cell_t *cell, int row, int col, letter_t *letter_hor, letter_t *letter_ver, int symbol) {
 	cell->row = row;
 	cell->col = col;
@@ -396,7 +384,7 @@ static void set_cell(cell_t *cell, int row, int col, letter_t *letter_hor, lette
 	cell->ver_whites_max = 0;
 	cell->sym180 = cells+(rows_n-row)*cols_total+cols_n-col;
 	cell->sym90 = cells+(col+1)*cols_total+row+1;
-	cell->blacks_in_col = (rows_n-row-1)/len_max_with_black;
+	cell->blacks_in_col = row >= 0 ? (rows_n-row-1)/(letter_root.len_max+1):(rows_n+row)/(letter_root.len_max+1);
 	cell->pos = row*cols_n+col+1;
 	cell->visited = 0;
 }
@@ -412,199 +400,7 @@ static int solve_grid(cell_t *cell) {
 	if (cell->row < rows_n) {
 		node_t *node_hor = (cell-1)->letter_hor->next;
 		if (cell->col < cols_n) {
-			int ver_whites_min, ver_whites_max, hor_whites_min, hor_whites_max, choices_lo = choices_hi, choices_n, symmetric_bak, blacks_in_col, r, i, j;
-			node_t *node_ver = (cell-cols_total)->letter_ver->next;
-			if (sym_blacks) {
-				cell_t *cell_sym;
-				for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
-				ver_whites_min = cell->sym180->row-cell_sym->row;
-				for (; cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
-				ver_whites_max = cell->sym180->row-cell_sym->row;
-				for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
-				hor_whites_min = cell->sym180->col-cell_sym->col;
-				for (; cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
-				hor_whites_max = cell->sym180->col-cell_sym->col;
-			}
-			else {
-				ver_whites_max = cell->ver_whites_max;
-				hor_whites_max = cell->hor_whites_max;
-				if (blacks_n1+1 < blacks_max) {
-					ver_whites_min = 0;
-					hor_whites_min = 0;
-				}
-				else {
-					ver_whites_min = ver_whites_max;
-					hor_whites_min = hor_whites_max;
-				}
-			}
-			i = 0;
-			if (symmetric && cell->row > cell->col) {
-				for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
-			}
-			if (node_hor != node_ver) {
-				for (j = 0; i < node_hor->letters_n; ++i) {
-					if (!check_letter1(node_hor->letters+i, hor_whites_max, hor_whites_min)) {
-						continue;
-					}
-					for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
-					if (j == node_ver->letters_n) {
-						break;
-					}
-					if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
-						if (check_letter1(node_ver->letters+j, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
-							return -1;
-						}
-						++j;
-					}
-				}
-			}
-			else {
-				for (; i < node_hor->letters_n; ++i) {
-					if (check_letter2(node_ver->letters+i, hor_whites_max, hor_whites_min, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+i)) {
-						return -1;
-					}
-				}
-			}
-			if (sym_blacks) {
-				if (cell->sym180 > cell) {
-					unknown_cells_n -= 2;
-				}
-				else if (cell->sym180 == cell) {
-					--unknown_cells_n;
-				}
-			}
-			choices_n = choices_hi-choices_lo;
-			if (choices_n > 1) {
-				if (heuristic == HEURISTIC_FREQUENCY) {
-					qsort(choices+choices_lo, (size_t)choices_n, sizeof(choice_t), compare_choices);
-				}
-				else if (heuristic == HEURISTIC_RANDOM) {
-					for (i = choices_lo; i < choices_hi; ++i) {
-						choice_t choice_tmp;
-						j = (int)emtrand((unsigned long)(choices_hi-i))+i;
-						choice_tmp = choices[i];
-						choices[i] = choices[j];
-						choices[j] = choice_tmp;
-					}
-				}
-			}
-			symmetric_bak = symmetric;
-			blacks_in_col = blacks_in_cols[cell->col];
-			r = 0;
-			for (i = choices_lo, j = 0; i < choices_hi && j < choices_max && !r; ++i) {
-				copy_choice(cell, choices+i);
-				if (symmetric_bak && cell->row > cell->col) {
-					symmetric = cell->letter_hor->symbol == cell->sym90->symbol;
-				}
-				if (cell->letter_hor->symbol != SYMBOL_BLACK) {
-					blacks_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+(rows_n-cell->row-cell->letter_ver->len_max-1)/len_max_with_black:0;
-					blacks_n2 += blacks_in_cols[cell->col]-blacks_in_col;
-					if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
-						if (connected_whites) {
-							if (!whites_n) {
-								first_white = cell;
-							}
-							if (sym_blacks) {
-								if (cell->sym180 > cell) {
-									whites_n += 2;
-								}
-								else if (cell->sym180 == cell) {
-									++whites_n;
-								}
-							}
-							else {
-								++whites_n;
-							}
-						}
-						--cell->letter_hor->leaves_n;
-						--cell->letter_ver->leaves_n;
-						cell->symbol = cell->letter_hor->symbol;
-						if (sym_blacks && cell->sym180 > cell) {
-							cell->sym180->symbol = SYMBOL_WHITE;
-						}
-						r = solve_grid(cell+1);
-						++j;
-						if (sym_blacks && cell->sym180 > cell) {
-							cell->sym180->symbol = SYMBOL_UNKNOWN;
-						}
-						cell->symbol = sym_blacks && cell->sym180 < cell ? SYMBOL_WHITE:SYMBOL_UNKNOWN;
-						++cell->letter_ver->leaves_n;
-						++cell->letter_hor->leaves_n;
-						if (connected_whites) {
-							if (sym_blacks) {
-								if (cell->sym180 > cell) {
-									whites_n -= 2;
-								}
-								else if (cell->sym180 == cell) {
-									--whites_n;
-								}
-							}
-							else {
-								--whites_n;
-							}
-						}
-					}
-					blacks_n2 -= blacks_in_cols[cell->col]-blacks_in_col;
-				}
-				else {
-					++blacks_n1;
-					blacks_in_cols[cell->col] = cell->blacks_in_col;
-					blacks_n2 += cell->blacks_in_col-blacks_in_col;
-					if (sym_blacks) {
-						if (cell->sym180 > cell) {
-							++blacks_n3;
-						}
-						else if (cell->sym180 < cell) {
-							--blacks_n3;
-						}
-					}
-					if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (double)blacks_n1/cell->pos <= blacks_ratio)) {
-						--cell->letter_hor->leaves_n;
-						--cell->letter_ver->leaves_n;
-						if (!sym_blacks || cell->sym180 >= cell) {
-							cell->symbol = SYMBOL_BLACK;
-						}
-						if (sym_blacks && cell->sym180 > cell) {
-							cell->sym180->symbol = SYMBOL_BLACK;
-						}
-						if (!connected_whites || are_whites_connected(whites_n)) {
-							r = solve_grid(cell+1);
-							++j;
-						}
-						if (sym_blacks && cell->sym180 > cell) {
-							cell->sym180->symbol = SYMBOL_UNKNOWN;
-						}
-						if (!sym_blacks || cell->sym180 >= cell) {
-							cell->symbol = SYMBOL_UNKNOWN;
-						}
-						++cell->letter_ver->leaves_n;
-						++cell->letter_hor->leaves_n;
-					}
-					if (sym_blacks) {
-						if (cell->sym180 > cell) {
-							--blacks_n3;
-						}
-						else if (cell->sym180 < cell) {
-							++blacks_n3;
-						}
-					}
-					blacks_n2 -= cell->blacks_in_col-blacks_in_col;
-					--blacks_n1;
-				}
-			}
-			blacks_in_cols[cell->col] = blacks_in_col;
-			symmetric = symmetric_bak;
-			overflow |= choices_n > choices_max;
-			choices_hi = choices_lo;
-			if (sym_blacks) {
-				if (cell->sym180 > cell) {
-					unknown_cells_n += 2;
-				}
-				else if (cell->sym180 == cell) {
-					++unknown_cells_n;
-				}
-			}
-			return r;
+			return solve_grid_inter(node_hor, cell);
 		}
 		return solve_grid_final(node_hor->letters, cell+2);
 	}
@@ -630,44 +426,207 @@ static int solve_grid(cell_t *cell) {
 	return 0;
 }
 
+static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
+	int ver_whites_min, ver_whites_max, hor_whites_min, hor_whites_max, choices_lo = choices_hi, choices_n, symmetric_bak, blacks_in_col, r, i, j;
+	node_t *node_ver = (cell-cols_total)->letter_ver->next;
+	if (sym_blacks) {
+		cell_t *cell_sym;
+		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
+		ver_whites_min = cell->sym180->row-cell_sym->row;
+		for (; cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
+		ver_whites_max = cell->sym180->row-cell_sym->row;
+		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
+		hor_whites_min = cell->sym180->col-cell_sym->col;
+		for (; cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
+		hor_whites_max = cell->sym180->col-cell_sym->col;
+	}
+	else {
+		ver_whites_max = cell->ver_whites_max;
+		hor_whites_max = cell->hor_whites_max;
+		if (blacks_n1+1 < blacks_max) {
+			ver_whites_min = 0;
+			hor_whites_min = 0;
+		}
+		else {
+			ver_whites_min = ver_whites_max;
+			hor_whites_min = hor_whites_max;
+		}
+	}
+	i = 0;
+	if (symmetric && cell->row > cell->col) {
+		for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
+	}
+	if (node_hor != node_ver) {
+		for (j = 0; i < node_hor->letters_n; ++i) {
+			if (!check_letter1(node_hor->letters+i, hor_whites_max, hor_whites_min)) {
+				continue;
+			}
+			for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
+			if (j == node_ver->letters_n) {
+				break;
+			}
+			if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
+				if (check_letter1(node_ver->letters+j, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
+					return -1;
+				}
+				++j;
+			}
+		}
+	}
+	else {
+		for (; i < node_hor->letters_n; ++i) {
+			if (check_letter2(node_ver->letters+i, hor_whites_max, hor_whites_min, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+i)) {
+				return -1;
+			}
+		}
+	}
+	if (sym_blacks) {
+		if (cell->sym180 > cell) {
+			unknown_cells_n -= 2;
+		}
+		else if (cell->sym180 == cell) {
+			--unknown_cells_n;
+		}
+	}
+	choices_n = choices_hi-choices_lo;
+	if (choices_n > 1) {
+		if (heuristic == HEURISTIC_FREQUENCY) {
+			qsort(choices+choices_lo, (size_t)choices_n, sizeof(choice_t), compare_choices);
+		}
+		else if (heuristic == HEURISTIC_RANDOM) {
+			for (i = choices_lo; i < choices_hi; ++i) {
+				choice_t choice_tmp;
+				j = (int)emtrand((unsigned long)(choices_hi-i))+i;
+				choice_tmp = choices[i];
+				choices[i] = choices[j];
+				choices[j] = choice_tmp;
+			}
+		}
+	}
+	symmetric_bak = symmetric;
+	blacks_in_col = cell->blacks_in_col;
+	r = 0;
+	for (i = choices_lo, j = 0; i < choices_hi && j < choices_max && !r; ++i) {
+		copy_choice(cell, choices+i);
+		if (symmetric_bak && cell->row > cell->col) {
+			symmetric = cell->letter_hor->symbol == cell->sym90->symbol;
+		}
+		if (cell->letter_hor->symbol != SYMBOL_BLACK) {
+			cell->blacks_in_col = cell->row+cell->letter_ver->len_max < rows_n ? 1+(cell+cell->letter_ver->len_max*cols_total)->blacks_in_col:0;
+			blacks_n2 += cell->blacks_in_col-(cell-cols_total)->blacks_in_col;
+			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
+				if (connected_whites) {
+					if (!whites_n) {
+						first_white = cell;
+					}
+					if (sym_blacks) {
+						if (cell->sym180 > cell) {
+							whites_n += 2;
+						}
+						else if (cell->sym180 == cell) {
+							++whites_n;
+						}
+					}
+					else {
+						++whites_n;
+					}
+				}
+				--cell->letter_hor->leaves_n;
+				--cell->letter_ver->leaves_n;
+				cell->symbol = cell->letter_hor->symbol;
+				if (sym_blacks && cell->sym180 > cell) {
+					cell->sym180->symbol = SYMBOL_WHITE;
+				}
+				r = solve_grid(cell+1);
+				++j;
+				if (sym_blacks && cell->sym180 > cell) {
+					cell->sym180->symbol = SYMBOL_UNKNOWN;
+				}
+				cell->symbol = sym_blacks && cell->sym180 < cell ? SYMBOL_WHITE:SYMBOL_UNKNOWN;
+				++cell->letter_ver->leaves_n;
+				++cell->letter_hor->leaves_n;
+				if (connected_whites) {
+					if (sym_blacks) {
+						if (cell->sym180 > cell) {
+							whites_n -= 2;
+						}
+						else if (cell->sym180 == cell) {
+							--whites_n;
+						}
+					}
+					else {
+						--whites_n;
+					}
+				}
+			}
+			blacks_n2 -= cell->blacks_in_col-(cell-cols_total)->blacks_in_col;
+		}
+		else {
+			++blacks_n1;
+			blacks_n2 += cell->blacks_in_col-(cell-cols_total)->blacks_in_col;
+			if (sym_blacks) {
+				if (cell->sym180 > cell) {
+					++blacks_n3;
+				}
+				else if (cell->sym180 < cell) {
+					--blacks_n3;
+				}
+			}
+			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (double)blacks_n1/cell->pos <= blacks_ratio)) {
+				--cell->letter_hor->leaves_n;
+				--cell->letter_ver->leaves_n;
+				if (!sym_blacks || cell->sym180 >= cell) {
+					cell->symbol = SYMBOL_BLACK;
+				}
+				if (sym_blacks && cell->sym180 > cell) {
+					cell->sym180->symbol = SYMBOL_BLACK;
+				}
+				if (!connected_whites || are_whites_connected(whites_n)) {
+					r = solve_grid(cell+1);
+					++j;
+				}
+				if (sym_blacks && cell->sym180 > cell) {
+					cell->sym180->symbol = SYMBOL_UNKNOWN;
+				}
+				if (!sym_blacks || cell->sym180 >= cell) {
+					cell->symbol = SYMBOL_UNKNOWN;
+				}
+				++cell->letter_ver->leaves_n;
+				++cell->letter_hor->leaves_n;
+			}
+			if (sym_blacks) {
+				if (cell->sym180 > cell) {
+					--blacks_n3;
+				}
+				else if (cell->sym180 < cell) {
+					++blacks_n3;
+				}
+			}
+			blacks_n2 -= cell->blacks_in_col-(cell-cols_total)->blacks_in_col;
+			--blacks_n1;
+		}
+	}
+	cell->blacks_in_col = blacks_in_col;
+	symmetric = symmetric_bak;
+	overflow |= choices_n > choices_max;
+	choices_hi = choices_lo;
+	if (sym_blacks) {
+		if (cell->sym180 > cell) {
+			unknown_cells_n += 2;
+		}
+		else if (cell->sym180 == cell) {
+			++unknown_cells_n;
+		}
+	}
+	return r;
+}
+
 static int check_letter1(letter_t *letter, int whites_max, int whites_min) {
 	return letter->leaves_n && letter->len_min <= whites_max && letter->len_max >= whites_min;
 }
 
 static int check_letter2(letter_t *letter, int hor_whites_max, int hor_whites_min, int ver_whites_max, int ver_whites_min) {
 	return letter->leaves_n > 1 && letter->len_min <= hor_whites_max && letter->len_max >= hor_whites_min && letter->len_min <= ver_whites_max && letter->len_max >= ver_whites_min;
-}
-
-static int are_whites_connected(int target) {
-	int i;
-	if (!target || (sym_blacks && blacks_n1 > blacks_n3+2)) {
-		return 1;
-	}
-	queued_cells_n = 0;
-	add_cell_to_queue(first_white);
-	for (i = 0; i < queued_cells_n; ++i) {
-		if (queued_cells[i]->symbol != SYMBOL_UNKNOWN) {
-			--target;
-			if (!target) {
-				break;
-			}
-		}
-		add_cell_to_queue(queued_cells[i]+1);
-		add_cell_to_queue(queued_cells[i]+cols_total);
-		add_cell_to_queue(queued_cells[i]-1);
-		add_cell_to_queue(queued_cells[i]-cols_total);
-	}
-	for (i = queued_cells_n; i--; ) {
-		queued_cells[i]->visited = 0;
-	}
-	return !target;
-}
-
-static void add_cell_to_queue(cell_t *cell) {
-	if (cell->symbol != SYMBOL_BLACK && !cell->visited) {
-		cell->visited = 1;
-		queued_cells[queued_cells_n++] = cell;
-	}
 }
 
 static int add_choice(int cell_symbol, letter_t *letter_hor, letter_t *letter_ver) {
@@ -758,6 +717,38 @@ static int solve_grid_final(letter_t *letter, cell_t *cell) {
 		return r;
 	}
 	return 0;
+}
+
+static int are_whites_connected(int target) {
+	int i;
+	if (!target || (sym_blacks && blacks_n1 > blacks_n3+2)) {
+		return 1;
+	}
+	queued_cells_n = 0;
+	add_cell_to_queue(first_white);
+	for (i = 0; i < queued_cells_n; ++i) {
+		if (queued_cells[i]->symbol != SYMBOL_UNKNOWN) {
+			--target;
+			if (!target) {
+				break;
+			}
+		}
+		add_cell_to_queue(queued_cells[i]+1);
+		add_cell_to_queue(queued_cells[i]+cols_total);
+		add_cell_to_queue(queued_cells[i]-1);
+		add_cell_to_queue(queued_cells[i]-cols_total);
+	}
+	for (i = queued_cells_n; i--; ) {
+		queued_cells[i]->visited = 0;
+	}
+	return !target;
+}
+
+static void add_cell_to_queue(cell_t *cell) {
+	if (cell->symbol != SYMBOL_BLACK && !cell->visited) {
+		cell->visited = 1;
+		queued_cells[queued_cells_n++] = cell;
+	}
 }
 
 static void free_node(node_t *node) {

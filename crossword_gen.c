@@ -458,15 +458,12 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 	}
 	if (node_hor != node_ver) {
 		for (j = 0; i < node_hor->letters_n; ++i) {
-			if (!check_letter1(node_hor->letters+i, hor_whites_max, hor_whites_min)) {
-				continue;
-			}
 			for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
 			if (j == node_ver->letters_n) {
 				break;
 			}
 			if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
-				if (check_letter1(node_ver->letters+j, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
+				if (check_letter1(node_hor->letters+i, hor_whites_max, hor_whites_min) && check_letter1(node_ver->letters+j, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
 					return -1;
 				}
 				++j;

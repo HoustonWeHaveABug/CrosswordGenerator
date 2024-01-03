@@ -42,8 +42,8 @@ struct cell_s {
 	letter_t *letter_hor;
 	letter_t *letter_ver;
 	int symbol;
-	int ver_whites_max;
 	int hor_whites_max;
+	int ver_whites_max;
 	cell_t *sym180;
 	cell_t *sym90;
 	int blacks_in_col;
@@ -391,8 +391,8 @@ static void set_cell(cell_t *cell, int row, int col, letter_t *letter_hor, lette
 
 static void set_cell_whites_max(cell_t *cell) {
 	if (cell->symbol != SYMBOL_BLACK) {
-		cell->ver_whites_max = (cell+cols_total)->ver_whites_max+1;
 		cell->hor_whites_max = (cell+1)->hor_whites_max+1;
+		cell->ver_whites_max = (cell+cols_total)->ver_whites_max+1;
 	}
 }
 
@@ -427,29 +427,29 @@ static int solve_grid(cell_t *cell) {
 }
 
 static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
-	int ver_whites_min, ver_whites_max, hor_whites_min, hor_whites_max, choices_lo = choices_hi, choices_n, symmetric_bak, blacks_in_col, r, i, j;
+	int hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_lo = choices_hi, choices_n, symmetric_bak, blacks_in_col, r, i, j;
 	node_t *node_ver = (cell-cols_total)->letter_ver->next;
 	if (sym_blacks) {
 		cell_t *cell_sym;
-		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
-		ver_whites_min = cell->sym180->row-cell_sym->row;
-		for (; cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
-		ver_whites_max = cell->sym180->row-cell_sym->row;
 		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
 		hor_whites_min = cell->sym180->col-cell_sym->col;
 		for (; cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
 		hor_whites_max = cell->sym180->col-cell_sym->col;
+		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
+		ver_whites_min = cell->sym180->row-cell_sym->row;
+		for (; cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
+		ver_whites_max = cell->sym180->row-cell_sym->row;
 	}
 	else {
-		ver_whites_max = cell->ver_whites_max;
 		hor_whites_max = cell->hor_whites_max;
+		ver_whites_max = cell->ver_whites_max;
 		if (blacks_n1+1 < blacks_max) {
-			ver_whites_min = 0;
 			hor_whites_min = 0;
+			ver_whites_min = 0;
 		}
 		else {
-			ver_whites_min = ver_whites_max;
 			hor_whites_min = hor_whites_max;
+			ver_whites_min = ver_whites_max;
 		}
 	}
 	i = 0;

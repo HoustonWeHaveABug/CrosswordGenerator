@@ -1,6 +1,6 @@
 # CrosswordGenerator
 
-crossword_gen is a program written in C allowing to generate random crosswords from a list of words.
+crossword_gen is a program written in C allowing to generate crosswords from a list of words.
 
 The following parameters are expected on the standard input:
 
@@ -29,7 +29,7 @@ When a valid solution is found, the current number of black squares becomes the 
 
 When the Frequency heuristic is used, the program will sort the list of possible choices at each cell using their frequency of usage. When the Random heuristic is used, a shuffle of those choices is performed.
 
-The program will use the value provided for Maximum number of choices at each step to limit the size of the search tree. If it is impossible to generate a crossword with the initial value provided for this parameter, then it is incremented and the search starts again until a solution is found.
+The program will use the value provided for Maximum number of choices at each step to limit the size of the search tree. If it is impossible to generate a crossword with the initial value provided for this parameter, then it is incremented and the search starts again until a solution is found or all the possible choices were tried.
 
 When the Black squares symmetry option is enabled, the program will ensure black squares are placed respecting the 180-degree rotational symmetry constraint. Otherwise there is no constraint on the placement of black squares.
 

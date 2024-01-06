@@ -47,6 +47,7 @@ struct cell_s {
 	cell_t *sym90;
 	int blacks_in_col;
 	int pos;
+	int unknown_cells_n;
 	int visited;
 };
 
@@ -58,7 +59,7 @@ typedef struct {
 }
 choice_t;
 
-static void expected_parameters(int);
+static void expected_parameters(void);
 static int load_dictionary(FILE *);
 static int new_word(int *, int);
 static letter_t *get_letter(node_t *, int);
@@ -71,9 +72,9 @@ static void set_row(cell_t *, int, letter_t *, letter_t *, int);
 static void set_cell(cell_t *, int, int, letter_t *, letter_t *, int);
 static void set_cell_whites_max(cell_t *);
 static int solve_grid(cell_t *);
-static int solve_grid_inter(node_t *, cell_t *);
+static int solve_grid_inter(cell_t *, node_t *, node_t *, int);
 static int check_letter1(letter_t *, int, int);
-static int check_letter2(letter_t *, int, int, int, int);
+static int check_letter2(letter_t *);
 static int add_choice(int, letter_t *, letter_t *);
 static void set_choice(choice_t *, letter_t *, letter_t *);
 static void hilo_multiply(int, int, int *, int *);
@@ -87,7 +88,7 @@ static int are_whites_connected(cell_t *);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int short_bits, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, cells_n, unknown_cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, overflow, queued_cells_n;
+static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, cells_n, choices_size, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -96,7 +97,7 @@ static cell_t *cells, **queued_cells, *first_white;
 static choice_t *choices;
 
 int main(int argc, char *argv[]) {
-	int cells_max, options, r, i;
+	int options, r, i;
 	FILE *fd;
 	time_t mtseed;
 	short_bits = (int)sizeof(int)*HALF_BITS;
@@ -104,12 +105,12 @@ int main(int argc, char *argv[]) {
 	short_max = cells_max-1;
 	if (argc != 2) {
 		fprintf(stderr, "Usage: %s <dictionary>\n", argv[0]);
-		expected_parameters(cells_max);
+		expected_parameters();
 		return EXIT_FAILURE;
 	}
 	if (scanf("%d%d%d%d%u%d%d", &rows_n, &cols_n, &blacks_min, &blacks_max, &heuristic, &choices_max, &options) != 7 || rows_n < 1 || rows_n > cols_n || rows_n > cells_max/cols_n || blacks_min < 0 || blacks_min > blacks_max || blacks_max > rows_n*cols_n || choices_max < 1) {
 		fputs("Invalid grid settings\n", stderr);
-		expected_parameters(cells_max);
+		expected_parameters();
 		return EXIT_FAILURE;
 	}
 	sym_blacks = options & OPTION_SYM_BLACKS;
@@ -143,6 +144,7 @@ int main(int argc, char *argv[]) {
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
+	cells_n = rows_n*cols_n;
 	set_row(cells, -1, NULL, &letter_root, SYMBOL_BLACK);
 	for (i = 1; i <= rows_n; ++i) {
 		set_row(cells+i*cols_total, i-1, &letter_root, NULL, SYMBOL_UNKNOWN);
@@ -163,7 +165,6 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	choices_size = 1;
-	cells_n = rows_n*cols_n;
 	queued_cells = malloc(sizeof(cell_t *)*(size_t)cells_n);
 	if (!queued_cells) {
 		fputs("Could not allocate memory for queued_cells\n", stderr);
@@ -173,7 +174,6 @@ int main(int argc, char *argv[]) {
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
-	unknown_cells_n = cells_n;
 	choices_hi = 0;
 	symmetric = rows_n == cols_n;
 	blacks_n1 = 0;
@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
 		smtrand((unsigned long)mtseed);
 		overflow = 0;
 		r = solve_grid(cells+cols_total+1);
-		if (overflow) {
+		if (overflow && !r) {
 			++choices_max;
 		}
 	}
@@ -200,7 +200,7 @@ int main(int argc, char *argv[]) {
 	return EXIT_SUCCESS;
 }
 
-static void expected_parameters(int cells_max) {
+static void expected_parameters(void) {
 	fputs("Parameters expected on the standard input:\n", stderr);
 	fputs("- Number of rows (> 0)\n", stderr);
 	fprintf(stderr, "- Number of columns (>= Number of rows, Number of cells <= %d)\n", cells_max);
@@ -386,6 +386,7 @@ static void set_cell(cell_t *cell, int row, int col, letter_t *letter_hor, lette
 	cell->sym90 = cells+(col+1)*cols_total+row+1;
 	cell->blacks_in_col = row >= 0 ? (rows_n-row-1)/(letter_root.len_max+1):(rows_n+row)/(letter_root.len_max+1);
 	cell->pos = row*cols_n+col+1;
+	cell->unknown_cells_n = sym_blacks ? cell->sym180 <= cell ? 0:cells_n-cell->pos*2:cells_n-cell->pos;
 	cell->visited = 0;
 }
 
@@ -400,7 +401,7 @@ static int solve_grid(cell_t *cell) {
 	if (cell->row < rows_n) {
 		node_t *node_hor = (cell-1)->letter_hor->next;
 		if (cell->col < cols_n) {
-			return solve_grid_inter(node_hor, cell);
+			return solve_grid_inter(cell, node_hor, (cell-cols_total)->letter_ver->next, choices_hi);
 		}
 		return solve_grid_final(node_hor->letters, cell+2);
 	}
@@ -426,9 +427,8 @@ static int solve_grid(cell_t *cell) {
 	return 0;
 }
 
-static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
-	int hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_lo = choices_hi, choices_n, symmetric_bak, blacks_in_col, r, i, j;
-	node_t *node_ver = (cell-cols_total)->letter_ver->next;
+static int solve_grid_inter(cell_t *cell, node_t *node_hor, node_t *node_ver, int choices_lo) {
+	int hor_letters_max, choices_n, symmetric_bak, blacks_in_col, r, i, j;
 	if (sym_blacks) {
 		cell_t *cell_sym;
 		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
@@ -452,12 +452,13 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 			ver_whites_min = ver_whites_max;
 		}
 	}
+	hor_letters_max = cell->symbol != SYMBOL_BLACK ? node_hor->letters_n:1;
 	i = 0;
 	if (symmetric && cell->row > cell->col) {
-		for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
+		for (; i < hor_letters_max && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
 	}
 	if (node_hor != node_ver) {
-		for (j = 0; i < node_hor->letters_n; ++i) {
+		for (j = 0; i < hor_letters_max; ++i) {
 			for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
 			if (j == node_ver->letters_n) {
 				break;
@@ -471,18 +472,10 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 		}
 	}
 	else {
-		for (; i < node_hor->letters_n; ++i) {
-			if (check_letter2(node_ver->letters+i, hor_whites_max, hor_whites_min, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+i)) {
+		for (; i < hor_letters_max; ++i) {
+			if (check_letter2(node_hor->letters+i) && !add_choice(cell->symbol, node_hor->letters+i, node_hor->letters+i)) {
 				return -1;
 			}
-		}
-	}
-	if (sym_blacks) {
-		if (cell->sym180 > cell) {
-			unknown_cells_n -= 2;
-		}
-		else if (cell->sym180 == cell) {
-			--unknown_cells_n;
 		}
 	}
 	choices_n = choices_hi-choices_lo;
@@ -492,9 +485,8 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 		}
 		else if (heuristic == HEURISTIC_RANDOM) {
 			for (i = choices_lo; i < choices_hi; ++i) {
-				choice_t choice_tmp;
+				choice_t choice_tmp = choices[i];
 				j = (int)emtrand((unsigned long)(choices_hi-i))+i;
-				choice_tmp = choices[i];
 				choices[i] = choices[j];
 				choices[j] = choice_tmp;
 			}
@@ -502,8 +494,7 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 	}
 	symmetric_bak = symmetric;
 	blacks_in_col = cell->blacks_in_col;
-	r = 0;
-	for (i = choices_lo, j = 0; i < choices_hi && j < choices_max && !r; ++i) {
+	for (i = choices_lo, j = 0, r = 0; i < choices_hi && j < choices_max && !r; ++i) {
 		copy_choice(cell, choices+i);
 		if (symmetric_bak && cell->row > cell->col) {
 			symmetric = cell->letter_hor->symbol == cell->sym90->symbol;
@@ -511,7 +502,7 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 		if (cell->letter_hor->symbol != SYMBOL_BLACK) {
 			cell->blacks_in_col = cell->row+cell->letter_ver->len_max < rows_n ? 1+(cell+cell->letter_ver->len_max*cols_total)->blacks_in_col:0;
 			blacks_n2 += cell->blacks_in_col-(cell-cols_total)->blacks_in_col;
-			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
+			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+cell->unknown_cells_n)) {
 				roll_cell(cell, cell->letter_hor->symbol);
 				if (connected_whites && cell->pos == blacks_n1+1) {
 					first_white = cell;
@@ -524,7 +515,8 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 		}
 		else {
 			++blacks_n1;
-			blacks_n2 += cell->blacks_in_col-(cell-cols_total)->blacks_in_col;
+			cell->blacks_in_col = blacks_in_col;
+			blacks_n2 += blacks_in_col-(cell-cols_total)->blacks_in_col;
 			if (sym_blacks) {
 				if (cell->sym180 > cell) {
 					++blacks_n3;
@@ -533,7 +525,7 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 					--blacks_n3;
 				}
 			}
-			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (double)blacks_n1/cell->pos <= blacks_ratio)) {
+			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+cell->unknown_cells_n)) && (!linear_blacks || (double)blacks_n1/cell->pos <= blacks_ratio)) {
 				roll_cell(cell, SYMBOL_BLACK);
 				if (!connected_whites || are_whites_connected(cell)) {
 					r = solve_grid(cell+1);
@@ -549,7 +541,7 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 					++blacks_n3;
 				}
 			}
-			blacks_n2 -= cell->blacks_in_col-(cell-cols_total)->blacks_in_col;
+			blacks_n2 -= blacks_in_col-(cell-cols_total)->blacks_in_col;
 			--blacks_n1;
 		}
 	}
@@ -557,14 +549,6 @@ static int solve_grid_inter(node_t *node_hor, cell_t *cell) {
 	symmetric = symmetric_bak;
 	overflow |= choices_n > choices_max;
 	choices_hi = choices_lo;
-	if (sym_blacks) {
-		if (cell->sym180 > cell) {
-			unknown_cells_n += 2;
-		}
-		else if (cell->sym180 == cell) {
-			++unknown_cells_n;
-		}
-	}
 	return r;
 }
 
@@ -572,7 +556,7 @@ static int check_letter1(letter_t *letter, int whites_max, int whites_min) {
 	return letter->leaves_n && letter->len_min <= whites_max && letter->len_max >= whites_min;
 }
 
-static int check_letter2(letter_t *letter, int hor_whites_max, int hor_whites_min, int ver_whites_max, int ver_whites_min) {
+static int check_letter2(letter_t *letter) {
 	return letter->leaves_n > 1 && letter->len_min <= hor_whites_max && letter->len_max >= hor_whites_min && letter->len_min <= ver_whites_max && letter->len_max >= ver_whites_min;
 }
 
@@ -691,7 +675,7 @@ static int are_whites_connected(cell_t *cell) {
 	if (cell->pos == blacks_n1 || (sym_blacks && blacks_n1 > blacks_n3+2)) {
 		return 1;
 	}
-	whites_n = sym_blacks ? cells_n-unknown_cells_n-blacks_n1-blacks_n3:cell->pos-blacks_n1;
+	whites_n = cells_n-cell->unknown_cells_n-blacks_n1-blacks_n3;
 	queued_cells_n = 0;
 	add_cell_to_queue(first_white);
 	for (i = 0; i < queued_cells_n; ++i) {

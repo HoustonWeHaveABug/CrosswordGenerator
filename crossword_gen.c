@@ -46,7 +46,6 @@ struct cell_s {
 	int ver_whites_max;
 	cell_t *sym180;
 	cell_t *sym90;
-	int blacks_in_col;
 	int visited;
 };
 
@@ -59,20 +58,20 @@ typedef struct {
 choice_t;
 
 static void expected_parameters(void);
-static int load_dictionary(FILE *);
-static int new_word(int *, int);
+static int load_dictionary(const char *);
+static int new_word(const int *, int);
 static letter_t *get_letter(node_t *, int);
 static letter_t *new_letter(node_t *, int);
 static node_t *new_node(void);
-static void sort_node(letter_t *, node_t *);
+static void sort_node(letter_t *, const node_t *);
 static void sort_child(letter_t *, letter_t *);
 static int compare_letters(const void *, const void *);
 static void set_row(cell_t *, int, letter_t *, letter_t *, int);
 static void set_cell(cell_t *, int, int, letter_t *, letter_t *, int);
 static int solve_grid(cell_t *);
-static int solve_grid_inter(cell_t *, node_t *, node_t *, int);
-static int check_letter1(letter_t *, int, int);
-static int check_letter2(letter_t *);
+static int solve_grid_inter(cell_t *, const node_t *, const node_t *, int);
+static int check_letter1(const letter_t *, const letter_t *);
+static int check_letter2(const letter_t *);
 static int add_choice(int, letter_t *, letter_t *);
 static void set_choice(choice_t *, letter_t *, letter_t *);
 static void hilo_multiply(int, int, int *, int *);
@@ -84,7 +83,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, len_max_with_black, cols_total, choices_size, *blacks_in_cols, cells_n, choices_hi, unknown_cells_n, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n1, whites_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
+static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *blacks_counts, *blacks2_in_cols, cells_n, choices_hi, unknown_cells_n, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n1, whites_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -94,7 +93,6 @@ static choice_t *choices;
 
 int main(int argc, char *argv[]) {
 	int options, r, i;
-	FILE *fd;
 	time_t mtseed;
 	short_bits = (int)sizeof(int)*HALF_BITS;
 	cells_max = 1 << short_bits;
@@ -116,23 +114,13 @@ int main(int argc, char *argv[]) {
 	if (!node_root) {
 		return 0;
 	}
-	fd = fopen(argv[1], "r");
-	if (!fd) {
-		fputs("Could not open the dictionary\n", stderr);
-		fflush(stderr);
+	if (!load_dictionary(argv[1])) {
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
-	if (!load_dictionary(fd)) {
-		fclose(fd);
-		free_node(node_root);
-		return EXIT_FAILURE;
-	}
-	fclose(fd);
 	letter_root.symbol = SYMBOL_BLACK;
 	letter_root.next = node_root;
 	sort_node(&letter_root, node_root);
-	len_max_with_black = letter_root.len_max+1;
 	cols_total = cols_n+2;
 	cells = malloc(sizeof(cell_t)*(size_t)((rows_n+2)*cols_total));
 	if (!cells) {
@@ -155,21 +143,28 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	choices_size = 1;
-	blacks_in_cols = calloc((size_t)cols_n, sizeof(int));
-	if (!blacks_in_cols) {
-		fputs("Could not allocate memory for blacks_in_cols\n", stderr);
+	blacks_counts = malloc(sizeof(int)*(size_t)(rows_n+cols_n));
+	if (!blacks_counts) {
+		fputs("Could not allocate memory for blacks_counts\n", stderr);
 		fflush(stderr);
 		free(choices);
 		free(cells);
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
+	for (i = rows_n; i--; ) {
+		blacks_counts[i] = (rows_n-i-1)/(letter_root.len_max+1);
+	}
+	blacks2_in_cols = blacks_counts+rows_n;
+	for (i = cols_n; i--; ) {
+		blacks2_in_cols[i] = 0;
+	}
 	cells_n = rows_n*cols_n;
 	queued_cells = malloc(sizeof(cell_t *)*(size_t)cells_n);
 	if (!queued_cells) {
 		fputs("Could not allocate memory for queued_cells\n", stderr);
 		fflush(stderr);
-		free(blacks_in_cols);
+		free(blacks_counts);
 		free(choices);
 		free(cells);
 		free_node(node_root);
@@ -179,7 +174,7 @@ int main(int argc, char *argv[]) {
 	unknown_cells_n = cells_n;
 	symmetric = rows_n == cols_n;
 	blacks_n1 = 0;
-	blacks_n2 = 0;
+	blacks_n2 = blacks_counts[0]*cols_n;
 	blacks_n3 = 0;
 	whites_n1 = 0;
 	whites_n3 = 0;
@@ -198,7 +193,7 @@ int main(int argc, char *argv[]) {
 	}
 	while (overflow && !r);
 	free(queued_cells);
-	free(blacks_in_cols);
+	free(blacks_counts);
 	free(choices);
 	free(cells);
 	free_node(node_root);
@@ -220,11 +215,19 @@ static void expected_parameters(void) {
 	fflush(stderr);
 }
 
-static int load_dictionary(FILE *fd) {
+static int load_dictionary(const char *fn) {
 	int *symbols = malloc(sizeof(int)*(size_t)cols_n), line, len, c;
+	FILE *fd;
 	if (!symbols) {
 		fputs("Could not allocate memory for symbols\n", stderr);
 		fflush(stderr);
+		return 0;
+	}
+	fd = fopen(fn, "r");
+	if (!fd) {
+		fputs("Could not open the dictionary\n", stderr);
+		fflush(stderr);
+		free(symbols);
 		return 0;
 	}
 	line = 1;
@@ -240,6 +243,7 @@ static int load_dictionary(FILE *fd) {
 		}
 		else if (c == '\n') {
 			if (((blacks_max && len <= cols_n) || len == rows_n || len == cols_n) && !new_word(symbols, len)) {
+				fclose(fd);
 				free(symbols);
 				return 0;
 			}
@@ -249,11 +253,13 @@ static int load_dictionary(FILE *fd) {
 		else {
 			fprintf(stderr, "Invalid character %c in dictionary on line %d\n", c, line);
 			fflush(stderr);
+			fclose(fd);
 			free(symbols);
 			return 0;
 		}
 		c = fgetc(fd);
 	}
+	fclose(fd);
 	free(symbols);
 	if (len) {
 		fputs("Unexpected end of dictionary\n", stderr);
@@ -263,7 +269,7 @@ static int load_dictionary(FILE *fd) {
 	return !blacks_max || get_letter(node_root, SYMBOL_BLACK) || new_letter(node_root, SYMBOL_BLACK);
 }
 
-static int new_word(int *symbols, int len) {
+static int new_word(const int *symbols, int len) {
 	int i;
 	node_t *node = node_root;
 	for (i = 0; i < len; ++i) {
@@ -333,7 +339,7 @@ static node_t *new_node(void) {
 	return node;
 }
 
-static void sort_node(letter_t *letter, node_t *node) {
+static void sort_node(letter_t *letter, const node_t *node) {
 	letter->leaves_n = 0;
 	letter->len_min = cols_n;
 	letter->len_max = 0;
@@ -389,7 +395,6 @@ static void set_cell(cell_t *cell, int row, int col, letter_t *letter_hor, lette
 	cell->ver_whites_max = rows_n-row;
 	cell->sym180 = cells+(rows_n-row)*cols_total+cols_n-col;
 	cell->sym90 = cells+(col+1)*cols_total+row+1;
-	cell->blacks_in_col = (rows_n-row-1)/len_max_with_black;
 	cell->visited = 0;
 }
 
@@ -423,8 +428,8 @@ static int solve_grid(cell_t *cell) {
 	return 0;
 }
 
-static int solve_grid_inter(cell_t *cell, node_t *node_hor, node_t *node_ver, int choices_lo) {
-	int hor_letters_max, choices_n, symmetric_bak, blacks_in_col, r, i, j;
+static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *node_ver, int choices_lo) {
+	int hor_letters_max, choices_n, symmetric_bak, blacks2_in_col, r, i, j;
 	if (sym_blacks) {
 		cell_t *cell_sym;
 		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
@@ -460,7 +465,7 @@ static int solve_grid_inter(cell_t *cell, node_t *node_hor, node_t *node_ver, in
 				break;
 			}
 			if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
-				if (check_letter1(node_hor->letters+i, hor_whites_max, hor_whites_min) && check_letter1(node_ver->letters+j, ver_whites_max, ver_whites_min) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
+				if (check_letter1(node_hor->letters+i, node_ver->letters+j) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
 					return -1;
 				}
 				++j;
@@ -497,15 +502,15 @@ static int solve_grid_inter(cell_t *cell, node_t *node_hor, node_t *node_ver, in
 		}
 	}
 	symmetric_bak = symmetric;
-	blacks_in_col = blacks_in_cols[cell->col];
+	blacks2_in_col = blacks2_in_cols[cell->col];
 	for (i = choices_lo, j = 0, r = 0; i < choices_hi && j < choices_max && !r; ++i) {
 		copy_choice(cell, choices+i);
 		if (symmetric_bak && cell->sym90 < cell) {
 			symmetric = cell->letter_hor->symbol == cell->sym90->symbol;
 		}
 		if (cell->letter_hor->symbol != SYMBOL_BLACK) {
-			blacks_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+(rows_n-cell->row-cell->letter_ver->len_max-1)/len_max_with_black:0;
-			blacks_n2 += blacks_in_cols[cell->col]-blacks_in_col;
+			blacks2_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+blacks_counts[cell->row+cell->letter_ver->len_max]:0;
+			blacks_n2 += blacks2_in_cols[cell->col]-blacks2_in_col;
 			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
 				++whites_n1;
 				if (connected_whites) {
@@ -547,12 +552,12 @@ static int solve_grid_inter(cell_t *cell, node_t *node_hor, node_t *node_ver, in
 				}
 				--whites_n1;
 			}
-			blacks_n2 -= blacks_in_cols[cell->col]-blacks_in_col;
+			blacks_n2 -= blacks2_in_cols[cell->col]-blacks2_in_col;
 		}
 		else {
 			++blacks_n1;
-			blacks_in_cols[cell->col] = cell->blacks_in_col;
-			blacks_n2 += cell->blacks_in_col-blacks_in_col;
+			blacks2_in_cols[cell->col] = blacks_counts[cell->row];
+			blacks_n2 += blacks2_in_cols[cell->col]-blacks2_in_col;
 			if (sym_blacks) {
 				if (cell->sym180 > cell) {
 					++blacks_n3;
@@ -591,11 +596,11 @@ static int solve_grid_inter(cell_t *cell, node_t *node_hor, node_t *node_ver, in
 					++blacks_n3;
 				}
 			}
-			blacks_n2 -= cell->blacks_in_col-blacks_in_col;
+			blacks_n2 -= blacks2_in_cols[cell->col]-blacks2_in_col;
 			--blacks_n1;
 		}
 	}
-	blacks_in_cols[cell->col] = blacks_in_col;
+	blacks2_in_cols[cell->col] = blacks2_in_col;
 	symmetric = symmetric_bak;
 	if (sym_blacks) {
 		if (cell->sym180 > cell) {
@@ -610,11 +615,11 @@ static int solve_grid_inter(cell_t *cell, node_t *node_hor, node_t *node_ver, in
 	return r;
 }
 
-static int check_letter1(letter_t *letter, int whites_max, int whites_min) {
-	return letter->leaves_n && letter->len_min <= whites_max && letter->len_max >= whites_min;
+static int check_letter1(const letter_t *letter_hor, const letter_t *letter_ver) {
+	return letter_hor->leaves_n && letter_hor->len_min <= hor_whites_max && letter_hor->len_max >= hor_whites_min && letter_ver->leaves_n && letter_ver->len_min <= ver_whites_max && letter_ver->len_max >= ver_whites_min;
 }
 
-static int check_letter2(letter_t *letter) {
+static int check_letter2(const letter_t *letter) {
 	return letter->leaves_n > 1 && letter->len_min <= hor_whites_max && letter->len_max >= hor_whites_min && letter->len_min <= ver_whites_max && letter->len_max >= ver_whites_min;
 }
 

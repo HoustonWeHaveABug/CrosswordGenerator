@@ -52,8 +52,7 @@ struct cell_s {
 typedef struct {
 	letter_t *letter_hor;
 	letter_t *letter_ver;
-	int leaves_hi;
-	int leaves_lo;
+	int leaves_mul;
 }
 choice_t;
 
@@ -74,8 +73,7 @@ static int check_letter1(const letter_t *, const letter_t *);
 static int check_letter2(const letter_t *);
 static int add_choice(int, letter_t *, letter_t *);
 static void set_choice(choice_t *, letter_t *, letter_t *);
-static void hilo_multiply(int, int, int *, int *);
-static void hilo_add(int, int, int *, int *);
+static int multiply_ints(int, int);
 static int compare_choices(const void *, const void *);
 static void copy_choice(cell_t *, choice_t *);
 static int solve_grid_final(letter_t *, cell_t *);
@@ -179,7 +177,6 @@ int main(int argc, char *argv[]) {
 	whites_n1 = 0;
 	whites_n3 = 0;
 	blacks_ratio = (double)blacks_max/cells_n;
-	++blacks_max;
 	mtseed = time(NULL);
 	do {
 		printf("CHOICES %d\n", choices_max);
@@ -411,8 +408,8 @@ static int solve_grid(cell_t *cell) {
 	}
 	if (!connected_whites || are_whites_connected(whites_n1+whites_n3)) {
 		int i;
-		blacks_ratio = (double)(blacks_n1-1)/cells_n;
-		blacks_max = blacks_n1;
+		blacks_max = blacks_n1-1;
+		blacks_ratio = (double)blacks_max/cells_n;
 		printf("BLACK SQUARES %d\n", blacks_n1);
 		for (i = 1; i <= rows_n; ++i) {
 			int j;
@@ -423,7 +420,7 @@ static int solve_grid(cell_t *cell) {
 			puts("");
 		}
 		fflush(stdout);
-		return blacks_min >= blacks_max;
+		return blacks_min > blacks_max;
 	}
 	return 0;
 }
@@ -444,7 +441,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 	else {
 		hor_whites_max = cell->hor_whites_max;
 		ver_whites_max = cell->ver_whites_max;
-		if (blacks_n1+1 < blacks_max) {
+		if (blacks_n1 < blacks_max) {
 			hor_whites_min = 0;
 			ver_whites_min = 0;
 		}
@@ -511,7 +508,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 		if (cell->letter_hor->symbol != SYMBOL_BLACK) {
 			blacks2_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+blacks_counts[cell->row+cell->letter_ver->len_max]:0;
 			blacks_n2 += blacks2_in_cols[cell->col]-blacks2_in_col;
-			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
+			if (blacks_n1+blacks_n2 <= blacks_max && (!sym_blacks || blacks_n2 <= blacks_n3+unknown_cells_n)) {
 				++whites_n1;
 				if (connected_whites) {
 					if (whites_n1 == 1) {
@@ -566,7 +563,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 					--blacks_n3;
 				}
 			}
-			if (blacks_n1+blacks_n2 < blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 < blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (double)blacks_n1 <= blacks_ratio*(whites_n1+blacks_n1))) {
+			if (blacks_n1+blacks_n2 <= blacks_max && (!sym_blacks || (blacks_n1+blacks_n3 <= blacks_max && blacks_n2 <= blacks_n3+unknown_cells_n)) && (!linear_blacks || (double)blacks_n1 <= blacks_ratio*(whites_n1+blacks_n1))) {
 				--cell->letter_hor->leaves_n;
 				--cell->letter_ver->leaves_n;
 				if (!sym_blacks || cell->sym180 >= cell) {
@@ -653,46 +650,21 @@ static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_
 	choice->letter_hor = letter_hor;
 	choice->letter_ver = letter_ver;
 	if (heuristic == HEURISTIC_FREQUENCY) {
-		hilo_multiply(letter_hor->leaves_n, letter_ver->leaves_n, &choice->leaves_lo, &choice->leaves_hi);
+		choice->leaves_mul = letter_hor != letter_ver ? multiply_ints(letter_hor->leaves_n, letter_ver->leaves_n):letter_hor->leaves_n;
 	}
 }
 
-static void hilo_multiply(int a, int b, int *lo, int *hi) {
-	int a1, a2, b1, b2, m12, m21, carry1, carry2;
+static int multiply_ints(int a, int b) {
 	if (a <= INT_MAX/b) {
-		*lo = a*b;
-		*hi = 0;
-		return;
+		return a*b;
 	}
-	a1 = a & short_max;
-	a2 = a >> short_bits;
-	b1 = b & short_max;
-	b2 = b >> short_bits;
-	m12 = a1*b2;
-	m21 = a2*b1;
-	hilo_add(a1*b1, (m12 & short_max) << short_bits, lo, &carry1);
-	hilo_add(*lo, (m21 & short_max) << short_bits, lo, &carry2);
-	*hi = carry1+carry2+(m12 >> short_bits)+(m21 >> short_bits)+a2*b2;
-}
-
-static void hilo_add(int a, int b, int *lo, int *hi) {
-	int delta = INT_MAX-b;
-	if (a <= delta) {
-		*lo = a+b;
-		*hi = 0;
-		return;
-	}
-	*lo = a-delta-1;
-	*hi = 1;
+	return INT_MAX;
 }
 
 static int compare_choices(const void *a, const void *b) {
 	const choice_t *choice_a = (const choice_t *)a, *choice_b = (const choice_t *)b;
-	if (choice_a->leaves_hi != choice_b->leaves_hi) {
-		return choice_b->leaves_hi-choice_a->leaves_hi;
-	}
-	if (choice_a->leaves_lo != choice_b->leaves_lo) {
-		return choice_b->leaves_lo-choice_a->leaves_lo;
+	if (choice_a->leaves_mul != choice_b->leaves_mul) {
+		return choice_b->leaves_mul-choice_a->leaves_mul;
 	}
 	return choice_a->letter_hor->symbol-choice_b->letter_hor->symbol;
 }

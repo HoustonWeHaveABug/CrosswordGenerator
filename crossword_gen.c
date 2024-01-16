@@ -71,7 +71,7 @@ static int solve_grid(cell_t *);
 static int solve_grid_inter(cell_t *, const node_t *, const node_t *, int);
 static int check_letter1(const letter_t *, const letter_t *);
 static int check_letter2(const letter_t *);
-static int add_choice(int, letter_t *, letter_t *);
+static int add_choice(letter_t *, letter_t *);
 static void set_choice(choice_t *, letter_t *, letter_t *);
 static int multiply_ints(int, int);
 static int compare_choices(const void *, const void *);
@@ -110,7 +110,7 @@ int main(int argc, char *argv[]) {
 	linear_blacks = options & OPTION_LINEAR_BLACKS;
 	node_root = new_node();
 	if (!node_root) {
-		return 0;
+		return EXIT_FAILURE;
 	}
 	if (!load_dictionary(argv[1])) {
 		free_node(node_root);
@@ -425,7 +425,7 @@ static int solve_grid(cell_t *cell) {
 }
 
 static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *node_ver, int choices_lo) {
-	int hor_letters_max, choices_n, symmetric_bak, blacks2_in_col, r, i, j;
+	int choices_n, symmetric_bak, blacks2_in_col, r, i, j;
 	if (sym_blacks) {
 		cell_t *cell_sym;
 		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
@@ -449,28 +449,46 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 			ver_whites_min = ver_whites_max;
 		}
 	}
-	hor_letters_max = cell->symbol != SYMBOL_BLACK ? node_hor->letters_n:1;
 	i = 0;
+	if (cell->symbol == SYMBOL_WHITE) {
+		if (node_hor->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK) {
+			++i;
+		}
+	}
 	if (symmetric && cell->sym90 < cell) {
-		for (; i < hor_letters_max && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
+		for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
 	}
 	if (node_hor != node_ver) {
-		for (j = 0; i < hor_letters_max; ++i) {
-			for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
-			if (j == node_ver->letters_n) {
-				break;
-			}
-			if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
-				if (check_letter1(node_hor->letters+i, node_ver->letters+j) && !add_choice(cell->symbol, node_hor->letters+i, node_ver->letters+j)) {
-					return -1;
+		if (cell->symbol != SYMBOL_BLACK) {
+			for (j = 0; i < node_hor->letters_n; ++i) {
+				for (; j < node_ver->letters_n && node_ver->letters[j].symbol < node_hor->letters[i].symbol; ++j);
+				if (j == node_ver->letters_n) {
+					break;
 				}
-				++j;
+				if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
+					if (check_letter1(node_hor->letters+i, node_ver->letters+j) && !add_choice(node_hor->letters+i, node_ver->letters+j)) {
+						return -1;
+					}
+					++j;
+				}
+			}
+		}
+		else {
+			if (node_hor->letters_n && node_ver->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK && node_ver->letters[0].symbol == SYMBOL_BLACK && check_letter1(node_hor->letters, node_ver->letters) && !add_choice(node_hor->letters, node_ver->letters)) {
+				return -1;
 			}
 		}
 	}
 	else {
-		for (; i < hor_letters_max; ++i) {
-			if (check_letter2(node_hor->letters+i) && !add_choice(cell->symbol, node_hor->letters+i, node_hor->letters+i)) {
+		if (cell->symbol != SYMBOL_BLACK) {
+			for (; i < node_hor->letters_n; ++i) {
+				if (check_letter2(node_hor->letters+i) && !add_choice(node_hor->letters+i, node_hor->letters+i)) {
+					return -1;
+				}
+			}
+		}
+		else {
+			if (node_hor->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK && check_letter2(node_hor->letters) && !add_choice(node_hor->letters, node_hor->letters)) {
 				return -1;
 			}
 		}
@@ -603,17 +621,7 @@ static int check_letter2(const letter_t *letter) {
 	return letter->leaves_n > 1 && letter->len_min <= hor_whites_max && letter->len_max >= hor_whites_min && letter->len_min <= ver_whites_max && letter->len_max >= ver_whites_min;
 }
 
-static int add_choice(int cell_symbol, letter_t *letter_hor, letter_t *letter_ver) {
-	if (letter_hor->symbol != SYMBOL_BLACK) {
-		if (cell_symbol == SYMBOL_BLACK) {
-			return 1;
-		}
-	}
-	else {
-		if (cell_symbol == SYMBOL_WHITE) {
-			return 1;
-		}
-	}
+static int add_choice(letter_t *letter_hor, letter_t *letter_ver) {
 	if (choices_hi == choices_size) {
 		choice_t *choices_tmp = realloc(choices, sizeof(choice_t)*(size_t)(choices_hi+1));
 		if (!choices_tmp) {

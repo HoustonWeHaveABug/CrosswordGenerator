@@ -543,7 +543,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 				if (sym_blacks && cell->sym180 > cell) {
 					cell->sym180->symbol = SYMBOL_UNKNOWN;
 				}
-				cell->symbol = sym_blacks && cell->sym180 < cell ? SYMBOL_WHITE:SYMBOL_UNKNOWN;
+				cell->symbol = sym_blacks && cell->sym180 >= cell ? SYMBOL_UNKNOWN:SYMBOL_WHITE;
 				++cell->letter_ver->leaves_n;
 				++cell->letter_hor->leaves_n;
 				if (connected_whites) {

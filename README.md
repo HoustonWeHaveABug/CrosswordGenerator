@@ -14,14 +14,15 @@ The following parameters are expected on the standard input:
   - Black squares symmetry (0: disabled, 1: enabled)
   - White squares connected (0: disabled, 2: enabled)
   - Linear blacks (0: disabled, 4: enabled)
+- \[ RNG seed \]
 
 The path to the list of words to be used by the program is expected as an argument. In the list, each word must be written in lowercase or uppercase (no space or special character allowed), one word per line.
 
 #### Example (program executed under Linux)
 
-$ echo 10 15 10 25 1 2 3 | crossword_gen my_words.txt
+$ echo 10 15 10 25 1 2 3 123456789 | crossword_gen my_words.txt
 
-Means "Generate a 10x15 crossword, with 10 black squares at least, 25 black squares at most, use random heuristic, start with a maximum of 2 choices at each step, enable black squares symmetry, enable white squares connected, disable linear blacks. Use the file my_words.txt as the list of words."
+Means "Generate a 10x15 crossword, with 10 black squares at least, 25 black squares at most, use random heuristic, start with a maximum of 2 choices at each step, enable black squares symmetry, enable white squares connected, disable linear blacks. Use 123456789 as the random seed. Use the file my_words.txt as the list of words."
 
 The program generates a trie from the list of words provided. The crossword is generated cell by cell, in a row scan way. At each step the program determines the list of possible letters and if a black square can be placed from the current horizontal and vertical nodes in the trie.
 
@@ -36,3 +37,5 @@ When the Black squares symmetry option is enabled, the program will ensure black
 When the White squares connected option is enabled, the program will ensure all white squares are connected to each other. Otherwise there is no constraint on the placement of white squares.
 
 When the Linear blacks option is enabled, the program will try to put a black square at most every (Number of rows \* Number of colums)/(Maximum number of black squares) cells. It means in this case the program may miss valid solutions. Otherwise a full search is always performed.
+
+When a RNG seed is provided on the standard input it will be used to seed the Mersenne Twister RNG. Otherwise the result of the time() function will be used.

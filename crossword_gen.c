@@ -210,6 +210,7 @@ static void expected_parameters(void) {
 	fprintf(stderr, "\t- Black squares symmetry (0: disabled, %d: enabled)\n", OPTION_SYM_BLACKS);
 	fprintf(stderr, "\t- White squares connected (0: disabled, %d: enabled)\n", OPTION_CONNECTED_WHITES);
 	fprintf(stderr, "\t- Linear blacks (0: disabled, %d: enabled)\n", OPTION_LINEAR_BLACKS);
+	fputs("- [ Random seed ]\n", stderr);
 	fflush(stderr);
 }
 

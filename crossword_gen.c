@@ -81,7 +81,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *blacks_counts, *blacks2_in_cols, cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n1, whites_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
+static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n1, whites_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -91,7 +91,7 @@ static choice_t *choices;
 
 int main(int argc, char *argv[]) {
 	int options, r, i;
-	time_t mtseed;
+	unsigned long mtseed;
 	short_bits = (int)sizeof(int)*HALF_BITS;
 	cells_max = 1 << short_bits;
 	short_max = cells_max-1;
@@ -141,9 +141,9 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	choices_size = 1;
-	blacks_counts = malloc(sizeof(int)*(size_t)(rows_n+cols_n));
-	if (!blacks_counts) {
-		fputs("Could not allocate memory for blacks_counts\n", stderr);
+	black_counts = malloc(sizeof(int)*(size_t)(rows_n+cols_n));
+	if (!black_counts) {
+		fputs("Could not allocate memory for black_counts\n", stderr);
 		fflush(stderr);
 		free(choices);
 		free(cells);
@@ -151,9 +151,9 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	for (i = rows_n; i--; ) {
-		blacks_counts[i] = (rows_n-i-1)/(letter_root.len_max+1);
+		black_counts[i] = (rows_n-i-1)/(letter_root.len_max+1);
 	}
-	blacks2_in_cols = blacks_counts+rows_n;
+	blacks2_in_cols = black_counts+rows_n;
 	for (i = cols_n; i--; ) {
 		blacks2_in_cols[i] = 0;
 	}
@@ -162,7 +162,7 @@ int main(int argc, char *argv[]) {
 	if (!queued_cells) {
 		fputs("Could not allocate memory for queued_cells\n", stderr);
 		fflush(stderr);
-		free(blacks_counts);
+		free(black_counts);
 		free(choices);
 		free(cells);
 		free_node(node_root);
@@ -171,16 +171,18 @@ int main(int argc, char *argv[]) {
 	choices_hi = 0;
 	symmetric = rows_n == cols_n;
 	blacks_n1 = 0;
-	blacks_n2 = blacks_counts[0]*cols_n;
+	blacks_n2 = black_counts[0]*cols_n;
 	blacks_n3 = 0;
 	whites_n1 = 0;
 	whites_n3 = 0;
 	blacks_ratio = (double)blacks_max/cells_n;
-	mtseed = time(NULL);
+	if (scanf("%lu", &mtseed) != 1) {
+		mtseed = (unsigned long)time(NULL);
+	}
 	do {
 		printf("CHOICES %d\n", choices_max);
 		fflush(stdout);
-		smtrand((unsigned long)mtseed);
+		smtrand(mtseed);
 		overflow = 0;
 		r = solve_grid(cells+cols_total+1);
 		if (overflow && !r) {
@@ -189,7 +191,7 @@ int main(int argc, char *argv[]) {
 	}
 	while (overflow && !r);
 	free(queued_cells);
-	free(blacks_counts);
+	free(black_counts);
 	free(choices);
 	free(cells);
 	free_node(node_root);
@@ -515,7 +517,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 			symmetric = cell->letter_hor->symbol == cell->sym90->symbol;
 		}
 		if (cell->letter_hor->symbol != SYMBOL_BLACK) {
-			blacks2_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+blacks_counts[cell->row+cell->letter_ver->len_max]:0;
+			blacks2_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+black_counts[cell->row+cell->letter_ver->len_max]:0;
 			blacks_n2 += blacks2_in_cols[cell->col]-blacks2_in_col;
 			if (blacks_n1+blacks_n2 <= blacks_max) {
 				++whites_n1;
@@ -543,7 +545,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 				if (sym_blacks && cell->sym180 > cell) {
 					cell->sym180->symbol = SYMBOL_UNKNOWN;
 				}
-				cell->symbol = sym_blacks && cell->sym180 >= cell ? SYMBOL_UNKNOWN:SYMBOL_WHITE;
+				cell->symbol = sym_blacks && cell->sym180 < cell ? SYMBOL_WHITE:SYMBOL_UNKNOWN;
 				++cell->letter_ver->leaves_n;
 				++cell->letter_hor->leaves_n;
 				if (connected_whites) {
@@ -562,7 +564,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 		}
 		else {
 			++blacks_n1;
-			blacks2_in_cols[cell->col] = blacks_counts[cell->row];
+			blacks2_in_cols[cell->col] = black_counts[cell->row];
 			blacks_n2 += blacks2_in_cols[cell->col]-blacks2_in_col;
 			if (sym_blacks) {
 				if (cell->sym180 > cell) {

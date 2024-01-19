@@ -185,9 +185,7 @@ int main(int argc, char *argv[]) {
 		smtrand(mtseed);
 		overflow = 0;
 		r = solve_grid(cells+cols_total+1);
-		if (overflow && !r) {
-			++choices_max;
-		}
+		++choices_max;
 	}
 	while (overflow && !r);
 	free(queued_cells);
@@ -286,9 +284,10 @@ static int new_word(const int *symbols, int len) {
 
 static letter_t *get_letter(node_t *node, int symbol) {
 	int i;
-	for (i = 0; i < node->letters_n && node->letters[i].symbol != symbol; ++i);
-	if (i < node->letters_n) {
-		return node->letters+i;
+	for (i = 0; i < node->letters_n; ++i) {
+		if (node->letters[i].symbol == symbol) {
+			return node->letters+i;
+		}
 	}
 	return NULL;
 }
@@ -339,16 +338,14 @@ static node_t *new_node(void) {
 }
 
 static void sort_node(letter_t *letter, const node_t *node) {
+	int i;
 	letter->leaves_n = 0;
 	letter->len_min = cols_n;
 	letter->len_max = 0;
-	if (node->letters_n) {
-		int i;
-		for (i = node->letters_n; i--; ) {
-			sort_child(letter, node->letters+i);
-		}
-		qsort(node->letters, (size_t)node->letters_n, sizeof(letter_t), compare_letters);
+	for (i = node->letters_n; i--; ) {
+		sort_child(letter, node->letters+i);
 	}
+	qsort(node->letters, (size_t)node->letters_n, sizeof(letter_t), compare_letters);
 }
 
 static void sort_child(letter_t *letter, letter_t *child) {
@@ -452,10 +449,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 			ver_whites_min = ver_whites_max;
 		}
 	}
-	i = 0;
-	if (cell->symbol == SYMBOL_WHITE && node_hor->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK) {
-		++i;
-	}
+	i = cell->symbol != SYMBOL_WHITE || node_hor->letters[0].symbol != SYMBOL_BLACK ? 0:1;
 	if (symmetric && cell->sym90 < cell) {
 		for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
 	}
@@ -475,7 +469,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 			}
 		}
 		else {
-			if (node_hor->letters_n && node_ver->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK && node_ver->letters[0].symbol == SYMBOL_BLACK && check_letter1(node_hor->letters, node_ver->letters) && !add_choice(node_hor->letters, node_ver->letters)) {
+			if (i < node_hor->letters_n && node_hor->letters[i].symbol == SYMBOL_BLACK && node_ver->letters[0].symbol == SYMBOL_BLACK && check_letter1(node_hor->letters, node_ver->letters) && !add_choice(node_hor->letters, node_ver->letters)) {
 				return -1;
 			}
 		}
@@ -489,7 +483,7 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 			}
 		}
 		else {
-			if (node_hor->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK && check_letter2(node_hor->letters) && !add_choice(node_hor->letters, node_hor->letters)) {
+			if (i < node_hor->letters_n && node_hor->letters[i].symbol == SYMBOL_BLACK && check_letter2(node_hor->letters) && !add_choice(node_hor->letters, node_hor->letters)) {
 				return -1;
 			}
 		}

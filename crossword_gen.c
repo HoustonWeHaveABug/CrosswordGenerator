@@ -453,10 +453,8 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 		}
 	}
 	i = 0;
-	if (cell->symbol == SYMBOL_WHITE) {
-		if (node_hor->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK) {
-			++i;
-		}
+	if (cell->symbol == SYMBOL_WHITE && node_hor->letters_n && node_hor->letters[0].symbol == SYMBOL_BLACK) {
+		++i;
 	}
 	if (symmetric && cell->sym90 < cell) {
 		for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
@@ -546,17 +544,15 @@ static int solve_grid_inter(cell_t *cell, const node_t *node_hor, const node_t *
 				if (sym_blacks && cell->sym180 > cell) {
 					cell->sym180->symbol = SYMBOL_UNKNOWN;
 				}
-				cell->symbol = sym_blacks && cell->sym180 < cell ? SYMBOL_WHITE:SYMBOL_UNKNOWN;
+				cell->symbol = !sym_blacks || cell->sym180 >= cell ? SYMBOL_UNKNOWN:SYMBOL_WHITE;
 				++cell->letter_ver->leaves_n;
 				++cell->letter_hor->leaves_n;
-				if (connected_whites) {
-					if (sym_blacks) {
-						if (cell->sym180 > cell) {
-							--whites_n3;
-						}
-						else if (cell->sym180 < cell) {
-							++whites_n3;
-						}
+				if (connected_whites && sym_blacks) {
+					if (cell->sym180 > cell) {
+						--whites_n3;
+					}
+					else if (cell->sym180 < cell) {
+						++whites_n3;
 					}
 				}
 				--whites_n1;

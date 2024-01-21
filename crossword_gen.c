@@ -119,6 +119,7 @@ int main(int argc, char *argv[]) {
 	letter_root.symbol = SYMBOL_BLACK;
 	letter_root.next = node_root;
 	sort_node(&letter_root, node_root);
+	letter_root.leaves_n -= rows_n+cols_n;
 	cols_total = cols_n+2;
 	cells = malloc(sizeof(cell_t)*(size_t)((rows_n+2)*cols_total));
 	if (!cells) {

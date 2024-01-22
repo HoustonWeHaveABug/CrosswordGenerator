@@ -58,9 +58,8 @@ choice_t;
 
 static void expected_parameters(void);
 static int load_dictionary(const char *);
-static int new_word(const int *, int);
-static letter_t *get_letter(node_t *, int);
-static letter_t *new_letter(node_t *, int);
+static node_t *get_node_next(node_t *, int);
+static node_t *set_letter(letter_t *, int);
 static node_t *new_node(void);
 static void sort_node(letter_t *, const node_t *);
 static void sort_child(letter_t *, letter_t *);
@@ -214,7 +213,8 @@ static void expected_parameters(void) {
 }
 
 static int load_dictionary(const char *fn) {
-	int *symbols = malloc(sizeof(int)*(size_t)cols_n), line, len, c;
+	int *symbols = malloc(sizeof(int)*(size_t)(cols_n+1)), line, len, c;
+	node_t *node;
 	FILE *fd;
 	if (!symbols) {
 		fputs("Could not allocate memory for symbols\n", stderr);
@@ -228,6 +228,7 @@ static int load_dictionary(const char *fn) {
 		free(symbols);
 		return 0;
 	}
+	node = node_root;
 	line = 1;
 	len = 0;
 	c = fgetc(fd);
@@ -240,10 +241,17 @@ static int load_dictionary(const char *fn) {
 			++len;
 		}
 		else if (c == '\n') {
-			if (((blacks_max && len <= cols_n) || len == rows_n || len == cols_n) && !new_word(symbols, len)) {
-				fclose(fd);
-				free(symbols);
-				return 0;
+			if (((blacks_max && len <= cols_n) || len == rows_n || len == cols_n)) {
+				int i;
+				symbols[len] = SYMBOL_BLACK;
+				for (i = 0; i <= len; ++i) {
+					node = get_node_next(node, symbols[i]);
+					if (!node) {
+						fclose(fd);
+						free(symbols);
+						return 0;
+					}
+				}
 			}
 			++line;
 			len = 0;
@@ -264,37 +272,17 @@ static int load_dictionary(const char *fn) {
 		fflush(stderr);
 		return 0;
 	}
-	return !blacks_max || get_letter(node_root, SYMBOL_BLACK) || new_letter(node_root, SYMBOL_BLACK);
+	return !blacks_max || get_node_next(node_root, SYMBOL_BLACK);
 }
 
-static int new_word(const int *symbols, int len) {
+static node_t *get_node_next(node_t *node, int symbol) {
 	int i;
-	node_t *node = node_root;
-	for (i = 0; i < len; ++i) {
-		letter_t *letter = get_letter(node, symbols[i]);
-		if (!letter) {
-			letter = new_letter(node, symbols[i]);
-			if (!letter) {
-				return 0;
-			}
-		}
-		node = letter->next;
-	}
-	return get_letter(node, SYMBOL_BLACK) || new_letter(node, SYMBOL_BLACK);
-}
-
-static letter_t *get_letter(node_t *node, int symbol) {
-	int i;
-	for (i = 0; i < node->letters_n; ++i) {
+	node_t *next;
+	for (i = node->letters_n; i--; ) {
 		if (node->letters[i].symbol == symbol) {
-			return node->letters+i;
+			return node->letters[i].next;
 		}
 	}
-	return NULL;
-}
-
-static letter_t *new_letter(node_t *node, int symbol) {
-	letter_t *letter;
 	if (node->letters_n) {
 		letter_t *letters = realloc(node->letters, sizeof(letter_t)*(size_t)(node->letters_n+1));
 		if (!letters) {
@@ -312,19 +300,15 @@ static letter_t *new_letter(node_t *node, int symbol) {
 			return NULL;
 		}
 	}
-	letter = node->letters+node->letters_n;
-	letter->symbol = symbol;
-	if (symbol != SYMBOL_BLACK) {
-		letter->next = new_node();
-		if (!letter->next) {
-			return NULL;
-		}
-	}
-	else {
-		letter->next = node_root;
-	}
+	next = set_letter(node->letters+node->letters_n, symbol);
 	++node->letters_n;
-	return letter;
+	return next;
+}
+
+static node_t *set_letter(letter_t *letter, int symbol) {
+	letter->symbol = symbol;
+	letter->next = symbol != SYMBOL_BLACK ? new_node():node_root;
+	return letter->next;
 }
 
 static node_t *new_node(void) {

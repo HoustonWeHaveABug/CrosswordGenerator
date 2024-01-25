@@ -22,7 +22,7 @@ The path to the list of words to be used by the program is expected as an argume
 
 $ echo 10 15 10 25 1 2 3 123456789 | crossword_gen my_words.txt
 
-Means "Generate a 10x15 crossword, with 10 black squares at least, 25 black squares at most, use random heuristic, start with a maximum of 2 choices at each step, enable black squares symmetry, enable white squares connected, disable linear blacks. Use 123456789 as the random seed. Use the file my_words.txt as the list of words."
+Means "Generate a 10x15 crossword, with 10 black squares at least, 25 black squares at most, use random heuristic, start with a maximum of 2 choices at each step, enable black squares symmetry, enable white squares connected, disable linear blacks. Use 123456789 as the RNG seed. Use the file my_words.txt as the list of words."
 
 The program generates a trie from the list of words provided. The crossword is generated cell by cell, in a row scan way. At each step the program determines the list of possible letters and if a black square can be placed from the current horizontal and vertical nodes in the trie.
 

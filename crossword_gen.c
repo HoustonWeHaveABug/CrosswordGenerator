@@ -80,7 +80,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, choices_hi, symmetric, blacks_n1, blacks_n2, blacks_n3, whites_n1, whites_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
+static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, symmetric, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -168,13 +168,14 @@ int main(int argc, char *argv[]) {
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
+	blacks_n1 = 0;
 	choices_hi = 0;
 	symmetric = rows_n == cols_n;
-	blacks_n1 = 0;
+	pos = 0;
 	blacks_n2 = black_counts[0]*cols_n;
-	blacks_n3 = 0;
 	whites_n1 = 0;
 	whites_n3 = 0;
+	blacks_n3 = 0;
 	blacks_ratio = (double)blacks_max/cells_n;
 	if (scanf("%lu", &mtseed) != 1) {
 		mtseed = (unsigned long)time(NULL);
@@ -389,7 +390,7 @@ static int solve_grid(cell_t *cell) {
 	if (cell->col < cols_n) {
 		return solve_end_cell((cell-cols_total)->letter_ver->next->letters, cell+1);
 	}
-	if (!connected_whites || are_whites_connected(whites_n1+whites_n3)) {
+	if (are_whites_connected(whites_n1)) {
 		int i;
 		blacks_max = blacks_n1-1;
 		blacks_ratio = (double)blacks_max/cells_n;
@@ -490,6 +491,9 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 		}
 	}
 	symmetric_bak = symmetric;
+	if (linear_blacks) {
+		++pos;
+	}
 	blacks2_in_col = blacks2_in_cols[cell->col];
 	blacks_n2 -= blacks2_in_col;
 	for (i = choices_lo, j = 0, r = 0; i < choices_hi && j < choices_max && !r; ++i) {
@@ -498,18 +502,13 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			blacks2_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+black_counts[cell->row+cell->letter_ver->len_max]:0;
 			blacks_n2 += blacks2_in_cols[cell->col];
 			if (blacks_n1+blacks_n2 <= blacks_max) {
-				++whites_n1;
 				if (connected_whites) {
-					if (whites_n1 == 1) {
+					if (!whites_n1) {
 						first_white = cell;
 					}
-					if (sym_blacks) {
-						if (cell->sym180 > cell) {
-							++whites_n3;
-						}
-						else if (cell->sym180 < cell) {
-							--whites_n3;
-						}
+					++whites_n1;
+					if (sym_blacks && cell->sym180 > cell) {
+						++whites_n3;
 					}
 				}
 				cell->symbol = cell->letter_hor->symbol;
@@ -529,15 +528,12 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 					cell->sym180->symbol = SYMBOL_UNKNOWN;
 				}
 				cell->symbol = !sym_blacks || cell->sym180 >= cell ? SYMBOL_UNKNOWN:SYMBOL_WHITE;
-				if (connected_whites && sym_blacks) {
-					if (cell->sym180 > cell) {
+				if (connected_whites) {
+					if (sym_blacks && cell->sym180 > cell) {
 						--whites_n3;
 					}
-					else if (cell->sym180 < cell) {
-						++whites_n3;
-					}
+					--whites_n1;
 				}
-				--whites_n1;
 			}
 		}
 		else {
@@ -552,14 +548,14 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 					--blacks_n3;
 				}
 			}
-			if (blacks_n1+blacks_n2 <= blacks_max && (!sym_blacks || blacks_n1+blacks_n3 <= blacks_max) && (!linear_blacks || (double)blacks_n1 <= blacks_ratio*(whites_n1+blacks_n1))) {
+			if (blacks_n1+blacks_n2 <= blacks_max && (!sym_blacks || blacks_n1+blacks_n3 <= blacks_max) && (!linear_blacks || (double)blacks_n1 <= blacks_ratio*pos)) {
 				if (!sym_blacks || cell->sym180 >= cell) {
 					cell->symbol = SYMBOL_BLACK;
 				}
 				if (sym_blacks && cell->sym180 > cell) {
 					cell->sym180->symbol = SYMBOL_BLACK;
 				}
-				if (!connected_whites || are_whites_connected(whites_n1+whites_n3)) {
+				if (are_whites_connected(whites_n1)) {
 					--cell->letter_hor->leaves_n;
 					--cell->letter_ver->leaves_n;
 					if (symmetric_bak && cell->sym90 < cell) {
@@ -591,6 +587,9 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 	}
 	blacks_n2 += blacks2_in_col;
 	blacks2_in_cols[cell->col] = blacks2_in_col;
+	if (linear_blacks) {
+		--pos;
+	}
 	symmetric = symmetric_bak;
 	overflow |= i < choices_hi;
 	choices_hi = choices_lo;
@@ -668,7 +667,7 @@ static int are_whites_connected(int target) {
 	queued_cells_n = 0;
 	add_cell_to_queue(first_white);
 	for (i = 0; i < queued_cells_n; ++i) {
-		if (queued_cells[i]->symbol != SYMBOL_UNKNOWN) {
+		if (isupper(queued_cells[i]->symbol)) {
 			--target;
 			if (!target) {
 				break;

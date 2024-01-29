@@ -80,7 +80,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int short_bits, cells_max, short_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, symmetric, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
+static int cells_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, symmetric, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -91,9 +91,7 @@ static choice_t *choices;
 int main(int argc, char *argv[]) {
 	int options, r, i;
 	unsigned long mtseed;
-	short_bits = (int)sizeof(int)*HALF_BITS;
-	cells_max = 1 << short_bits;
-	short_max = cells_max-1;
+	cells_max = 1 << (int)sizeof(int)*HALF_BITS;
 	if (argc != 2) {
 		fprintf(stderr, "Usage: %s <dictionary>\n", argv[0]);
 		expected_parameters();
@@ -412,15 +410,15 @@ static int solve_grid(cell_t *cell) {
 static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_ver, int choices_lo) {
 	int symmetric_bak, blacks2_in_col, r, i, j;
 	if (sym_blacks) {
-		cell_t *cell_sym;
-		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
-		hor_whites_min = cell->sym180->col-cell_sym->col;
-		for (; cell_sym->symbol != SYMBOL_BLACK; --cell_sym);
-		hor_whites_max = cell->sym180->col-cell_sym->col;
-		for (cell_sym = cell->sym180; cell_sym->symbol != SYMBOL_UNKNOWN && cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
-		ver_whites_min = cell->sym180->row-cell_sym->row;
-		for (; cell_sym->symbol != SYMBOL_BLACK; cell_sym -= cols_total);
-		ver_whites_max = cell->sym180->row-cell_sym->row;
+		cell_t *cell_cur;
+		for (cell_cur = cell->sym180; cell_cur->symbol != SYMBOL_UNKNOWN && cell_cur->symbol != SYMBOL_BLACK; --cell_cur);
+		hor_whites_min = cell->sym180->col-cell_cur->col;
+		for (; cell_cur->symbol != SYMBOL_BLACK; --cell_cur);
+		hor_whites_max = cell->sym180->col-cell_cur->col;
+		for (cell_cur = cell->sym180; cell_cur->symbol != SYMBOL_UNKNOWN && cell_cur->symbol != SYMBOL_BLACK; cell_cur -= cols_total);
+		ver_whites_min = cell->sym180->row-cell_cur->row;
+		for (; cell_cur->symbol != SYMBOL_BLACK; cell_cur -= cols_total);
+		ver_whites_max = cell->sym180->row-cell_cur->row;
 	}
 	else {
 		hor_whites_max = cell->hor_whites_max;

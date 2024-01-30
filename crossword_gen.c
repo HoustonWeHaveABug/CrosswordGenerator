@@ -240,7 +240,7 @@ static int load_dictionary(const char *fn) {
 			++len;
 		}
 		else if (c == '\n') {
-			if (((blacks_max && len <= cols_n) || len == rows_n || len == cols_n)) {
+			if ((blacks_max && len <= cols_n) || len == rows_n || len == cols_n) {
 				int i;
 				symbols[len] = SYMBOL_BLACK;
 				for (i = 0; i <= len; ++i) {

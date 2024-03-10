@@ -9,6 +9,7 @@
 #define OPTION_SYM_BLACKS 1
 #define OPTION_CONNECTED_WHITES 2
 #define OPTION_LINEAR_BLACKS 4
+#define OPTION_ITERATIVE_CHOICES 8
 #define SYMBOL_BLACK '#'
 #define SYMBOL_UNKNOWN '.'
 #define SYMBOL_WHITE '*'
@@ -80,7 +81,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int cells_max, rows_n, cols_n, blacks_min, blacks_max, choices_max, sym_blacks, connected_whites, linear_blacks, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, symmetric, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
+static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, symmetric, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -97,7 +98,7 @@ int main(int argc, char *argv[]) {
 		expected_parameters();
 		return EXIT_FAILURE;
 	}
-	if (scanf("%d%d%d%d%u%d%d", &rows_n, &cols_n, &blacks_min, &blacks_max, &heuristic, &choices_max, &options) != 7 || rows_n < 1 || rows_n > cols_n || rows_n > cells_max/cols_n || blacks_min < 0 || blacks_min > blacks_max || blacks_max > rows_n*cols_n || choices_max < 1) {
+	if (scanf("%d%d%d%d%u%d", &rows_n, &cols_n, &blacks_min, &blacks_max, &heuristic, &options) != 6 || rows_n < 1 || rows_n > cols_n || rows_n > cells_max/cols_n || blacks_min < 0 || blacks_min > blacks_max || blacks_max > rows_n*cols_n) {
 		fputs("Invalid grid settings\n", stderr);
 		expected_parameters();
 		return EXIT_FAILURE;
@@ -105,6 +106,7 @@ int main(int argc, char *argv[]) {
 	sym_blacks = options & OPTION_SYM_BLACKS;
 	connected_whites = options & OPTION_CONNECTED_WHITES;
 	linear_blacks = options & OPTION_LINEAR_BLACKS;
+	iterative_choices = options & OPTION_ITERATIVE_CHOICES;
 	node_root = new_node();
 	if (!node_root) {
 		return EXIT_FAILURE;
@@ -115,6 +117,7 @@ int main(int argc, char *argv[]) {
 	}
 	letter_root.symbol = SYMBOL_BLACK;
 	letter_root.next = node_root;
+	choices_max = 1;
 	sort_node(&letter_root, node_root);
 	letter_root.leaves_n -= rows_n+cols_n;
 	cols_total = cols_n+2;
@@ -202,11 +205,11 @@ static void expected_parameters(void) {
 	fputs("- Minimum number of black squares (>= 0)\n", stderr);
 	fputs("- Maximum number of black squares (>= Minimum number of black squares, <= Number of cells)\n", stderr);
 	fprintf(stderr, "- Heuristic (%u: frequency, %u: random, > %u: none)\n", HEURISTIC_FREQUENCY, HEURISTIC_RANDOM, HEURISTIC_RANDOM);
-	fputs("- Maximum number of choices at each step (> 0)\n", stderr);
 	fputs("- Options (= sum of the below flags)\n", stderr);
 	fprintf(stderr, "\t- Black squares symmetry (0: disabled, %d: enabled)\n", OPTION_SYM_BLACKS);
 	fprintf(stderr, "\t- White squares connected (0: disabled, %d: enabled)\n", OPTION_CONNECTED_WHITES);
 	fprintf(stderr, "\t- Linear blacks (0: disabled, %d: enabled)\n", OPTION_LINEAR_BLACKS);
+	fprintf(stderr, "\t- Iterative choices (0: disabled, %d: enabled)\n", OPTION_ITERATIVE_CHOICES);
 	fputs("- [ RNG seed ]\n", stderr);
 	fflush(stderr);
 }
@@ -330,6 +333,9 @@ static void sort_node(letter_t *letter, const node_t *node) {
 		sort_child(letter, node->letters+i);
 	}
 	qsort(node->letters, (size_t)node->letters_n, sizeof(letter_t), compare_letters);
+	if (!iterative_choices && node->letters_n > choices_max) {
+		choices_max = node->letters_n;
+	}
 }
 
 static void sort_child(letter_t *letter, letter_t *child) {

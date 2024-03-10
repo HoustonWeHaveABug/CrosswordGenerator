@@ -206,9 +206,9 @@ static void expected_parameters(void) {
 	fputs("- Maximum number of black squares (>= Minimum number of black squares, <= Number of cells)\n", stderr);
 	fprintf(stderr, "- Heuristic (%u: frequency, %u: random, > %u: none)\n", HEURISTIC_FREQUENCY, HEURISTIC_RANDOM, HEURISTIC_RANDOM);
 	fputs("- Options (= sum of the below flags)\n", stderr);
-	fprintf(stderr, "\t- Black squares symmetry (0: disabled, %d: enabled)\n", OPTION_SYM_BLACKS);
-	fprintf(stderr, "\t- White squares connected (0: disabled, %d: enabled)\n", OPTION_CONNECTED_WHITES);
-	fprintf(stderr, "\t- Linear blacks (0: disabled, %d: enabled)\n", OPTION_LINEAR_BLACKS);
+	fprintf(stderr, "\t- Symmetric black squares (0: disabled, %d: enabled)\n", OPTION_SYM_BLACKS);
+	fprintf(stderr, "\t- Connected white squares (0: disabled, %d: enabled)\n", OPTION_CONNECTED_WHITES);
+	fprintf(stderr, "\t- Linear black squares (0: disabled, %d: enabled)\n", OPTION_LINEAR_BLACKS);
 	fprintf(stderr, "\t- Iterative choices (0: disabled, %d: enabled)\n", OPTION_ITERATIVE_CHOICES);
 	fputs("- [ RNG seed ]\n", stderr);
 	fflush(stderr);

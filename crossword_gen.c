@@ -215,7 +215,7 @@ static void expected_parameters(void) {
 }
 
 static int load_dictionary(const char *fn) {
-	int *symbols = malloc(sizeof(int)*(size_t)(cols_n+1)), line, len, c;
+	int *symbols = malloc(sizeof(int)*(size_t)(cols_n+1)), len, c;
 	node_t *node;
 	FILE *fd;
 	if (!symbols) {
@@ -231,7 +231,6 @@ static int load_dictionary(const char *fn) {
 		return 0;
 	}
 	node = node_root;
-	line = 1;
 	len = 0;
 	c = fgetc(fd);
 	while (!feof(fd)) {
@@ -255,11 +254,10 @@ static int load_dictionary(const char *fn) {
 					}
 				}
 			}
-			++line;
 			len = 0;
 		}
 		else {
-			fprintf(stderr, "Invalid character %c in dictionary on line %d\n", c, line);
+			fprintf(stderr, "Invalid character %c in dictionary\n", c);
 			fflush(stderr);
 			fclose(fd);
 			free(symbols);
@@ -617,7 +615,7 @@ static int add_choice(letter_t *letter_hor, letter_t *letter_ver) {
 			return 0;
 		}
 		choices = choices_tmp;
-		choices_size = choices_hi+1;
+		++choices_size;
 	}
 	set_choice(choices+choices_hi, letter_hor, letter_ver);
 	++choices_hi;

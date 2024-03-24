@@ -65,8 +65,8 @@ static node_t *new_node(void);
 static void sort_node(letter_t *, const node_t *);
 static void sort_child(letter_t *, letter_t *);
 static int compare_letters(const void *, const void *);
-static void set_row(cell_t *, int, letter_t *, letter_t *, int);
-static void set_cell(cell_t *, int, int, letter_t *, letter_t *, int);
+static void set_row(cell_t *, int, int);
+static void set_cell(cell_t *, int, int, int);
 static int solve_grid(cell_t *);
 static int solve_cell(cell_t *, const node_t *, const node_t *, int);
 static int check_letters(const letter_t *, const letter_t *);
@@ -81,7 +81,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, symmetric, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
+static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, sym90, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -128,11 +128,11 @@ int main(int argc, char *argv[]) {
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
-	set_row(cells, -1, NULL, &letter_root, SYMBOL_BLACK);
+	set_row(cells, -1, SYMBOL_BLACK);
 	for (i = 1; i <= rows_n; ++i) {
-		set_row(cells+i*cols_total, i-1, &letter_root, NULL, SYMBOL_UNKNOWN);
+		set_row(cells+i*cols_total, i-1, SYMBOL_UNKNOWN);
 	}
-	set_row(cells+i*cols_total, rows_n, NULL, NULL, SYMBOL_BLACK);
+	set_row(cells+i*cols_total, i-1, SYMBOL_BLACK);
 	choices = malloc(sizeof(choice_t));
 	if (!choices) {
 		fputs("Could not allocate memory for choices\n", stderr);
@@ -171,7 +171,7 @@ int main(int argc, char *argv[]) {
 	}
 	blacks_n1 = 0;
 	choices_hi = 0;
-	symmetric = rows_n == cols_n;
+	sym90 = rows_n == cols_n;
 	pos = 0;
 	blacks_n2 = black_counts[0]*cols_n;
 	whites_n1 = 0;
@@ -360,20 +360,20 @@ static int compare_letters(const void *a, const void *b) {
 	return ((const letter_t *)a)->symbol-((const letter_t *)b)->symbol;
 }
 
-static void set_row(cell_t *first, int row, letter_t *letter_hor, letter_t *letter_ver, int symbol) {
+static void set_row(cell_t *first, int row, int symbol) {
 	int i;
-	set_cell(first, row, -1, letter_hor, NULL, SYMBOL_BLACK);
+	set_cell(first, row, -1, SYMBOL_BLACK);
 	for (i = 1; i <= cols_n; ++i) {
-		set_cell(first+i, row, i-1, NULL, letter_ver, symbol);
+		set_cell(first+i, row, i-1, symbol);
 	}
-	set_cell(first+i, row, cols_n, NULL, NULL, SYMBOL_BLACK);
+	set_cell(first+i, row, i-1, SYMBOL_BLACK);
 }
 
-static void set_cell(cell_t *cell, int row, int col, letter_t *letter_hor, letter_t *letter_ver, int symbol) {
+static void set_cell(cell_t *cell, int row, int col, int symbol) {
 	cell->row = row;
 	cell->col = col;
-	cell->letter_hor = letter_hor;
-	cell->letter_ver = letter_ver;
+	cell->letter_hor = &letter_root;
+	cell->letter_ver = &letter_root;
 	cell->symbol = symbol;
 	cell->hor_whites_max = cols_n-col;
 	cell->ver_whites_max = rows_n-row;
@@ -412,7 +412,7 @@ static int solve_grid(cell_t *cell) {
 }
 
 static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_ver, int choices_lo) {
-	int symmetric_bak, blacks2_in_col, r, i, j;
+	int sym90_bak, blacks2_in_col, r, i, j;
 	if (sym_blacks) {
 		cell_t *cell_cur;
 		for (cell_cur = cell->sym180; cell_cur->symbol != SYMBOL_UNKNOWN && cell_cur->symbol != SYMBOL_BLACK; --cell_cur);
@@ -437,7 +437,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 		}
 	}
 	i = cell->symbol != SYMBOL_WHITE || node_hor->letters[0].symbol != SYMBOL_BLACK ? 0:1;
-	if (symmetric && cell->sym90 < cell) {
+	if (sym90 && cell->sym90 < cell) {
 		for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
 	}
 	if (node_hor != node_ver) {
@@ -492,7 +492,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 		}
 	}
-	symmetric_bak = symmetric;
+	sym90_bak = sym90;
 	if (linear_blacks) {
 		++pos;
 	}
@@ -519,8 +519,8 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 				}
 				--cell->letter_hor->leaves_n;
 				--cell->letter_ver->leaves_n;
-				if (symmetric_bak && cell->sym90 < cell) {
-					symmetric = cell->symbol == cell->sym90->symbol;
+				if (sym90_bak && cell->sym90 < cell) {
+					sym90 = cell->symbol == cell->sym90->symbol;
 				}
 				r = solve_grid(cell+1);
 				++j;
@@ -560,8 +560,8 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 				if (are_whites_connected(whites_n1)) {
 					--cell->letter_hor->leaves_n;
 					--cell->letter_ver->leaves_n;
-					if (symmetric_bak && cell->sym90 < cell) {
-						symmetric = cell->symbol == cell->sym90->symbol;
+					if (sym90_bak && cell->sym90 < cell) {
+						sym90 = cell->symbol == cell->sym90->symbol;
 					}
 					r = solve_grid(cell+1);
 					++j;
@@ -592,7 +592,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 	if (linear_blacks) {
 		--pos;
 	}
-	symmetric = symmetric_bak;
+	sym90 = sym90_bak;
 	overflow |= i < choices_hi;
 	choices_hi = choices_lo;
 	return r;

@@ -155,8 +155,9 @@ int main(int argc, char *argv[]) {
 		black_counts[i] = (rows_n-i-1)/(letter_root.len_max+1);
 	}
 	blacks2_in_cols = black_counts+rows_n;
-	for (i = cols_n; i--; ) {
-		blacks2_in_cols[i] = 0;
+	blacks2_in_cols[0] = rows_n/(letter_root.len_max+1);
+	for (i = 1; i < cols_n; ++i) {
+		blacks2_in_cols[i] = blacks2_in_cols[i-1];
 	}
 	cells_n = rows_n*cols_n;
 	queued_cells = malloc(sizeof(cell_t *)*(size_t)cells_n);
@@ -173,7 +174,7 @@ int main(int argc, char *argv[]) {
 	choices_hi = 0;
 	sym90 = rows_n == cols_n;
 	pos = 0;
-	blacks_n2 = black_counts[0]*cols_n;
+	blacks_n2 = blacks2_in_cols[0]*cols_n;
 	whites_n1 = 0;
 	whites_n3 = 0;
 	blacks_n3 = 0;

@@ -81,7 +81,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, sym90, pos, blacks_n2, whites_n1, whites_n3, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, choices_n, queued_cells_n;
+static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, sym90, pos, blacks_n2, whites_n, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -175,8 +175,7 @@ int main(int argc, char *argv[]) {
 	sym90 = rows_n == cols_n;
 	pos = 0;
 	blacks_n2 = blacks2_in_cols[0]*cols_n;
-	whites_n1 = 0;
-	whites_n3 = 0;
+	whites_n = 0;
 	blacks_n3 = 0;
 	blacks_ratio = (double)blacks_max/cells_n;
 	if (scanf("%lu", &mtseed) != 1) {
@@ -384,6 +383,7 @@ static void set_cell(cell_t *cell, int row, int col, int symbol) {
 }
 
 static int solve_grid(cell_t *cell) {
+	int i;
 	if (cell->row < rows_n) {
 		if (cell->col < cols_n) {
 			return solve_cell(cell, (cell-1)->letter_hor->next, (cell-cols_total)->letter_ver->next, choices_hi);
@@ -393,23 +393,19 @@ static int solve_grid(cell_t *cell) {
 	if (cell->col < cols_n) {
 		return solve_end_cell((cell-cols_total)->letter_ver->next->letters, cell+1);
 	}
-	if (are_whites_connected(whites_n1)) {
-		int i;
-		blacks_max = blacks_n1-1;
-		blacks_ratio = (double)blacks_max/cells_n;
-		printf("BLACK SQUARES %d\n", blacks_n1);
-		for (i = 1; i <= rows_n; ++i) {
-			int j;
-			putchar(cells[i*cols_total+1].symbol);
-			for (j = 2; j <= cols_n; ++j) {
-				printf(" %c", cells[i*cols_total+j].symbol);
-			}
-			puts("");
+	blacks_max = blacks_n1-1;
+	blacks_ratio = (double)blacks_max/cells_n;
+	printf("BLACK SQUARES %d\n", blacks_n1);
+	for (i = 1; i <= rows_n; ++i) {
+		int j;
+		putchar(cells[i*cols_total+1].symbol);
+		for (j = 2; j <= cols_n; ++j) {
+			printf(" %c", cells[i*cols_total+j].symbol);
 		}
-		fflush(stdout);
-		return blacks_min > blacks_max;
+		puts("");
 	}
-	return 0;
+	fflush(stdout);
+	return blacks_min > blacks_max;
 }
 
 static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_ver, int choices_lo) {
@@ -476,13 +472,13 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 		}
 	}
-	choices_n = choices_hi-choices_lo;
-	if (!choices_n) {
+	r = choices_hi-choices_lo;
+	if (!r) {
 		return 0;
 	}
-	if (choices_n > 1) {
+	if (r > 1) {
 		if (heuristic == HEURISTIC_FREQUENCY) {
-			qsort(choices+choices_lo, (size_t)choices_n, sizeof(choice_t), compare_choices);
+			qsort(choices+choices_lo, (size_t)r, sizeof(choice_t), compare_choices);
 		}
 		else if (heuristic == HEURISTIC_RANDOM) {
 			for (i = choices_lo; i < choices_hi; ++i) {
@@ -506,12 +502,19 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			blacks_n2 += blacks2_in_cols[cell->col];
 			if (blacks_n1+blacks_n2 <= blacks_max) {
 				if (connected_whites) {
-					if (!whites_n1) {
+					if (!whites_n) {
 						first_white = cell;
 					}
-					++whites_n1;
-					if (sym_blacks && cell->sym180 > cell) {
-						++whites_n3;
+					if (sym_blacks) {
+						if (cell->sym180 > cell) {
+							whites_n += 2;
+						}
+						else if (cell->sym180 == cell) {
+							++whites_n;
+						}
+					}
+					else {
+						++whites_n;
 					}
 				}
 				cell->symbol = cell->letter_hor->symbol;
@@ -532,10 +535,17 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 				}
 				cell->symbol = !sym_blacks || cell->sym180 >= cell ? SYMBOL_UNKNOWN:SYMBOL_WHITE;
 				if (connected_whites) {
-					if (sym_blacks && cell->sym180 > cell) {
-						--whites_n3;
+					if (sym_blacks) {
+						if (cell->sym180 > cell) {
+							whites_n -= 2;
+						}
+						else if (cell->sym180 == cell) {
+							--whites_n;
+						}
 					}
-					--whites_n1;
+					else {
+						--whites_n;
+					}
 				}
 			}
 		}
@@ -558,7 +568,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 				if (sym_blacks && cell->sym180 > cell) {
 					cell->sym180->symbol = SYMBOL_BLACK;
 				}
-				if (are_whites_connected(whites_n1)) {
+				if (are_whites_connected(whites_n)) {
 					--cell->letter_hor->leaves_n;
 					--cell->letter_ver->leaves_n;
 					if (sym90_bak && cell->sym90 < cell) {
@@ -664,13 +674,13 @@ static int solve_end_cell(letter_t *letter, cell_t *cell) {
 
 static int are_whites_connected(int target) {
 	int i;
-	if (!target || (sym_blacks && blacks_n1 > blacks_n3+2 && whites_n1 > whites_n3)) {
+	if (!target || (sym_blacks && blacks_n1 > blacks_n3+2)) {
 		return 1;
 	}
 	queued_cells_n = 0;
 	add_cell_to_queue(first_white);
 	for (i = 0; i < queued_cells_n; ++i) {
-		if (isupper(queued_cells[i]->symbol)) {
+		if (queued_cells[i]->symbol != SYMBOL_UNKNOWN) {
 			--target;
 			if (!target) {
 				break;

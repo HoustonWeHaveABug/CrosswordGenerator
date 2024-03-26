@@ -81,7 +81,7 @@ static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
 static void free_node(node_t *);
 
-static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, sym90, pos, blacks_n2, whites_n, blacks_n3, overflow, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
+static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, sym90, pos, blacks_n2, whites_n, blacks_n3, partial, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
@@ -185,11 +185,11 @@ int main(int argc, char *argv[]) {
 		printf("CHOICES %d\n", choices_max);
 		fflush(stdout);
 		smtrand(mtseed);
-		overflow = 0;
+		partial = 0;
 		r = solve_grid(cells+cols_total+1);
 		++choices_max;
 	}
-	while (overflow && !r);
+	while (partial && !r);
 	free(queued_cells);
 	free(black_counts);
 	free(choices);
@@ -409,7 +409,7 @@ static int solve_grid(cell_t *cell) {
 }
 
 static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_ver, int choices_lo) {
-	int sym90_bak, blacks2_in_col, r, i, j;
+	int r, sym90_bak, blacks2_in_col, i, j;
 	if (sym_blacks) {
 		cell_t *cell_cur;
 		for (cell_cur = cell->sym180; cell_cur->symbol != SYMBOL_UNKNOWN && cell_cur->symbol != SYMBOL_BLACK; --cell_cur);
@@ -453,7 +453,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 		}
 		else {
-			if (i < node_hor->letters_n && node_hor->letters[i].symbol == SYMBOL_BLACK && node_ver->letters[0].symbol == SYMBOL_BLACK && check_letters(node_hor->letters, node_ver->letters) && !add_choice(node_hor->letters, node_ver->letters)) {
+			if (!i && node_hor->letters[0].symbol == SYMBOL_BLACK && node_ver->letters[0].symbol == SYMBOL_BLACK && check_letters(node_hor->letters, node_ver->letters) && !add_choice(node_hor->letters, node_ver->letters)) {
 				return -1;
 			}
 		}
@@ -467,7 +467,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 		}
 		else {
-			if (i < node_hor->letters_n && node_hor->letters[i].symbol == SYMBOL_BLACK && check_letter(node_hor->letters) && !add_choice(node_hor->letters, node_hor->letters)) {
+			if (!i && node_hor->letters[0].symbol == SYMBOL_BLACK && check_letter(node_hor->letters) && !add_choice(node_hor->letters, node_hor->letters)) {
 				return -1;
 			}
 		}
@@ -604,7 +604,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 		--pos;
 	}
 	sym90 = sym90_bak;
-	overflow |= i < choices_hi;
+	partial |= i < choices_hi;
 	choices_hi = choices_lo;
 	return r;
 }
@@ -637,7 +637,7 @@ static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_
 	choice->letter_hor = letter_hor;
 	choice->letter_ver = letter_ver;
 	if (heuristic == HEURISTIC_FREQUENCY) {
-		choice->leaves_n = letter_hor != letter_ver ? multiply_ints(letter_hor->leaves_n, letter_ver->leaves_n):letter_hor->leaves_n;
+		choice->leaves_n = multiply_ints(letter_hor->leaves_n, letter_ver->leaves_n);
 	}
 }
 

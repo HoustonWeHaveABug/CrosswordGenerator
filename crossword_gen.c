@@ -76,9 +76,9 @@ static void set_choice(choice_t *, letter_t *, letter_t *);
 static int multiply_ints(int, int);
 static int compare_choices(const void *, const void *);
 static void copy_choice(cell_t *, choice_t *);
-static int solve_end_cell(letter_t *, cell_t *);
 static int are_whites_connected(int);
 static void add_cell_to_queue(cell_t *);
+static int solve_end_cell(letter_t *, cell_t *);
 static void free_node(node_t *);
 
 static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, sym90, pos, blacks_n2, whites_n, blacks_n3, partial, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
@@ -119,7 +119,6 @@ int main(int argc, char *argv[]) {
 	letter_root.next = node_root;
 	choices_max = 1;
 	sort_node(&letter_root, node_root);
-	letter_root.leaves_n -= rows_n+cols_n;
 	cols_total = cols_n+2;
 	cells = malloc(sizeof(cell_t)*(size_t)((rows_n+2)*cols_total));
 	if (!cells) {
@@ -343,7 +342,7 @@ static void sort_child(letter_t *letter, letter_t *child) {
 		++child->len_max;
 	}
 	else {
-		child->leaves_n = letter != &letter_root ? 1:blacks_max*2+rows_n+cols_n;
+		child->leaves_n = letter != &letter_root ? 1:rows_n+cols_n+blacks_max*2;
 		child->len_min = 0;
 		child->len_max = 0;
 	}
@@ -433,7 +432,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			ver_whites_min = ver_whites_max;
 		}
 	}
-	i = cell->symbol != SYMBOL_WHITE || node_hor->letters[0].symbol != SYMBOL_BLACK ? 0:1;
+	i = cell->symbol != SYMBOL_WHITE || node_hor->letters->symbol != SYMBOL_BLACK ? 0:1;
 	if (sym90 && cell->sym90 < cell) {
 		for (; i < node_hor->letters_n && node_hor->letters[i].symbol < cell->sym90->symbol; ++i);
 	}
@@ -453,7 +452,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 		}
 		else {
-			if (!i && node_hor->letters[0].symbol == SYMBOL_BLACK && node_ver->letters[0].symbol == SYMBOL_BLACK && check_letters(node_hor->letters, node_ver->letters) && !add_choice(node_hor->letters, node_ver->letters)) {
+			if (!i && node_hor->letters->symbol == SYMBOL_BLACK && node_ver->letters->symbol == SYMBOL_BLACK && check_letters(node_hor->letters, node_ver->letters) && !add_choice(node_hor->letters, node_ver->letters)) {
 				return -1;
 			}
 		}
@@ -467,7 +466,7 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 		}
 		else {
-			if (!i && node_hor->letters[0].symbol == SYMBOL_BLACK && check_letter(node_hor->letters) && !add_choice(node_hor->letters, node_hor->letters)) {
+			if (!i && node_hor->letters->symbol == SYMBOL_BLACK && check_letter(node_hor->letters) && !add_choice(node_hor->letters, node_hor->letters)) {
 				return -1;
 			}
 		}
@@ -637,7 +636,7 @@ static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_
 	choice->letter_hor = letter_hor;
 	choice->letter_ver = letter_ver;
 	if (heuristic == HEURISTIC_FREQUENCY) {
-		choice->leaves_n = multiply_ints(letter_hor->leaves_n, letter_ver->leaves_n);
+		choice->leaves_n = letter_hor->symbol != SYMBOL_BLACK ? multiply_ints(letter_hor->leaves_n, letter_ver->leaves_n):1;
 	}
 }
 
@@ -659,17 +658,6 @@ static int compare_choices(const void *a, const void *b) {
 static void copy_choice(cell_t *cell, choice_t *choice) {
 	cell->letter_hor = choice->letter_hor;
 	cell->letter_ver = choice->letter_ver;
-}
-
-static int solve_end_cell(letter_t *letter, cell_t *cell) {
-	if (letter->symbol == SYMBOL_BLACK && letter->leaves_n) {
-		int r;
-		--letter->leaves_n;
-		r = solve_grid(cell);
-		++letter->leaves_n;
-		return r;
-	}
-	return 0;
 }
 
 static int are_whites_connected(int target) {
@@ -702,6 +690,17 @@ static void add_cell_to_queue(cell_t *cell) {
 		cell->visited = 1;
 		queued_cells[queued_cells_n++] = cell;
 	}
+}
+
+static int solve_end_cell(letter_t *letter, cell_t *cell) {
+	if (letter->symbol == SYMBOL_BLACK && letter->leaves_n) {
+		int r;
+		--letter->leaves_n;
+		r = solve_grid(cell);
+		++letter->leaves_n;
+		return r;
+	}
+	return 0;
 }
 
 static void free_node(node_t *node) {

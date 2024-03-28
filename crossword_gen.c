@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
 	unsigned long mtseed;
 	cells_max = 1 << (int)sizeof(int)*HALF_BITS;
 	if (argc != 2) {
-		fprintf(stderr, "Usage: %s <dictionary>\n", argv[0]);
+		fprintf(stderr, "Usage: %s <dictionary>\n", *argv);
 		expected_parameters();
 		return EXIT_FAILURE;
 	}
@@ -154,7 +154,7 @@ int main(int argc, char *argv[]) {
 		black_counts[i] = (rows_n-i-1)/(letter_root.len_max+1);
 	}
 	blacks2_in_cols = black_counts+rows_n;
-	blacks2_in_cols[0] = rows_n/(letter_root.len_max+1);
+	*blacks2_in_cols = rows_n/(letter_root.len_max+1);
 	for (i = 1; i < cols_n; ++i) {
 		blacks2_in_cols[i] = blacks2_in_cols[i-1];
 	}
@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
 	choices_hi = 0;
 	sym90 = rows_n == cols_n;
 	pos = 0;
-	blacks_n2 = blacks2_in_cols[0]*cols_n;
+	blacks_n2 = *blacks2_in_cols*cols_n;
 	whites_n = 0;
 	blacks_n3 = 0;
 	blacks_ratio = (double)blacks_max/cells_n;
@@ -443,11 +443,8 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 				if (j == node_ver->letters_n) {
 					break;
 				}
-				if (node_ver->letters[j].symbol == node_hor->letters[i].symbol) {
-					if (check_letters(node_hor->letters+i, node_ver->letters+j) && !add_choice(node_hor->letters+i, node_ver->letters+j)) {
-						return -1;
-					}
-					++j;
+				if (node_hor->letters[i].symbol == node_ver->letters[j].symbol && check_letters(node_hor->letters+i, node_ver->letters+j) && !add_choice(node_hor->letters+i, node_ver->letters+j)) {
+					return -1;
 				}
 			}
 		}
@@ -652,7 +649,7 @@ static int compare_choices(const void *a, const void *b) {
 	if (choice_a->leaves_n != choice_b->leaves_n) {
 		return choice_b->leaves_n-choice_a->leaves_n;
 	}
-	return choice_a->letter_hor->symbol-choice_b->letter_hor->symbol;
+	return choice_b->letter_hor->symbol-choice_a->letter_hor->symbol;
 }
 
 static void copy_choice(cell_t *cell, choice_t *choice) {

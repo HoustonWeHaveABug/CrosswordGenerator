@@ -43,11 +43,11 @@ struct cell_s {
 	letter_t *letter_hor;
 	letter_t *letter_ver;
 	int symbol;
-	int hor_whites_max;
-	int ver_whites_max;
+	int hor_len_max;
+	int ver_len_max;
 	cell_t *sym180;
 	cell_t *sym90;
-	int visited;
+	int marked;
 };
 
 typedef struct {
@@ -77,16 +77,16 @@ static int multiply_ints(int, int);
 static int compare_choices(const void *, const void *);
 static void copy_choice(cell_t *, choice_t *);
 static int are_whites_connected(int);
-static void add_cell_to_queue(cell_t *);
+static void add_marked_cell(cell_t *);
 static int solve_end_cell(letter_t *, cell_t *);
 static void free_node(node_t *);
 
-static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *black_counts, *blacks2_in_cols, cells_n, blacks_n1, choices_hi, sym90, pos, blacks_n2, whites_n, blacks_n3, partial, hor_whites_min, hor_whites_max, ver_whites_min, ver_whites_max, queued_cells_n;
+static int cells_max, rows_n, cols_n, blacks_min, blacks_max, sym_blacks, connected_whites, linear_blacks, iterative_choices, choices_max, cols_total, choices_size, *blacks2_lo, *blacks2_lo_cols, cells_n, blacks1_n, choices_hi, sym90, pos, blacks2_n, whites_n, blacks3_n, partial, hor_len_min, hor_len_max, ver_len_min, ver_len_max, marked_cells_n;
 static double blacks_ratio;
 static heuristic_t heuristic;
 static letter_t letter_root;
 static node_t *node_root;
-static cell_t *cells, **queued_cells, *first_white;
+static cell_t *cells, **marked_cells, *first_white;
 static choice_t *choices;
 
 int main(int argc, char *argv[]) {
@@ -141,9 +141,9 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	choices_size = 1;
-	black_counts = malloc(sizeof(int)*(size_t)(rows_n+cols_n));
-	if (!black_counts) {
-		fputs("Could not allocate memory for black_counts\n", stderr);
+	blacks2_lo = malloc(sizeof(int)*(size_t)(rows_n+cols_n));
+	if (!blacks2_lo) {
+		fputs("Could not allocate memory for blacks2_lo\n", stderr);
 		fflush(stderr);
 		free(choices);
 		free(cells);
@@ -151,31 +151,31 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	for (i = rows_n; i--; ) {
-		black_counts[i] = (rows_n-i-1)/(letter_root.len_max+1);
+		blacks2_lo[i] = (rows_n-i-1)/(letter_root.len_max+1);
 	}
-	blacks2_in_cols = black_counts+rows_n;
-	*blacks2_in_cols = rows_n/(letter_root.len_max+1);
+	blacks2_lo_cols = blacks2_lo+rows_n;
+	*blacks2_lo_cols = rows_n/(letter_root.len_max+1);
 	for (i = 1; i < cols_n; ++i) {
-		blacks2_in_cols[i] = blacks2_in_cols[i-1];
+		blacks2_lo_cols[i] = blacks2_lo_cols[i-1];
 	}
 	cells_n = rows_n*cols_n;
-	queued_cells = malloc(sizeof(cell_t *)*(size_t)cells_n);
-	if (!queued_cells) {
-		fputs("Could not allocate memory for queued_cells\n", stderr);
+	marked_cells = malloc(sizeof(cell_t *)*(size_t)cells_n);
+	if (!marked_cells) {
+		fputs("Could not allocate memory for marked_cells\n", stderr);
 		fflush(stderr);
-		free(black_counts);
+		free(blacks2_lo);
 		free(choices);
 		free(cells);
 		free_node(node_root);
 		return EXIT_FAILURE;
 	}
-	blacks_n1 = 0;
+	blacks1_n = 0;
 	choices_hi = 0;
 	sym90 = rows_n == cols_n;
 	pos = 0;
-	blacks_n2 = *blacks2_in_cols*cols_n;
+	blacks2_n = *blacks2_lo_cols*cols_n;
 	whites_n = 0;
-	blacks_n3 = 0;
+	blacks3_n = 0;
 	blacks_ratio = (double)blacks_max/cells_n;
 	if (scanf("%lu", &mtseed) != 1) {
 		mtseed = (unsigned long)time(NULL);
@@ -189,8 +189,8 @@ int main(int argc, char *argv[]) {
 		++choices_max;
 	}
 	while (partial && !r);
-	free(queued_cells);
-	free(black_counts);
+	free(marked_cells);
+	free(blacks2_lo);
 	free(choices);
 	free(cells);
 	free_node(node_root);
@@ -374,11 +374,11 @@ static void set_cell(cell_t *cell, int row, int col, int symbol) {
 	cell->letter_hor = &letter_root;
 	cell->letter_ver = &letter_root;
 	cell->symbol = symbol;
-	cell->hor_whites_max = cols_n-col;
-	cell->ver_whites_max = rows_n-row;
+	cell->hor_len_max = cols_n-col;
+	cell->ver_len_max = rows_n-row;
 	cell->sym180 = cells+(rows_n-row)*cols_total+cols_n-col;
 	cell->sym90 = cells+(col+1)*cols_total+row+1;
-	cell->visited = 0;
+	cell->marked = 0;
 }
 
 static int solve_grid(cell_t *cell) {
@@ -392,9 +392,9 @@ static int solve_grid(cell_t *cell) {
 	if (cell->col < cols_n) {
 		return solve_end_cell((cell-cols_total)->letter_ver->next->letters, cell+1);
 	}
-	blacks_max = blacks_n1-1;
+	blacks_max = blacks1_n-1;
 	blacks_ratio = (double)blacks_max/cells_n;
-	printf("BLACK SQUARES %d\n", blacks_n1);
+	printf("BLACK SQUARES %d\n", blacks1_n);
 	for (i = 1; i <= rows_n; ++i) {
 		int j;
 		putchar(cells[i*cols_total+1].symbol);
@@ -408,28 +408,28 @@ static int solve_grid(cell_t *cell) {
 }
 
 static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_ver, int choices_lo) {
-	int r, sym90_bak, blacks2_in_col, i, j;
+	int r, sym90_bak, blacks2_lo_col, i, j;
 	if (sym_blacks) {
 		cell_t *cell_cur;
 		for (cell_cur = cell->sym180; cell_cur->symbol != SYMBOL_UNKNOWN && cell_cur->symbol != SYMBOL_BLACK; --cell_cur);
-		hor_whites_min = cell->sym180->col-cell_cur->col;
+		hor_len_min = cell->sym180->col-cell_cur->col;
 		for (; cell_cur->symbol != SYMBOL_BLACK; --cell_cur);
-		hor_whites_max = cell->sym180->col-cell_cur->col;
+		hor_len_max = cell->sym180->col-cell_cur->col;
 		for (cell_cur = cell->sym180; cell_cur->symbol != SYMBOL_UNKNOWN && cell_cur->symbol != SYMBOL_BLACK; cell_cur -= cols_total);
-		ver_whites_min = cell->sym180->row-cell_cur->row;
+		ver_len_min = cell->sym180->row-cell_cur->row;
 		for (; cell_cur->symbol != SYMBOL_BLACK; cell_cur -= cols_total);
-		ver_whites_max = cell->sym180->row-cell_cur->row;
+		ver_len_max = cell->sym180->row-cell_cur->row;
 	}
 	else {
-		hor_whites_max = cell->hor_whites_max;
-		ver_whites_max = cell->ver_whites_max;
-		if (blacks_n1 < blacks_max) {
-			hor_whites_min = 0;
-			ver_whites_min = 0;
+		hor_len_max = cell->hor_len_max;
+		ver_len_max = cell->ver_len_max;
+		if (blacks1_n < blacks_max) {
+			hor_len_min = 0;
+			ver_len_min = 0;
 		}
 		else {
-			hor_whites_min = hor_whites_max;
-			ver_whites_min = ver_whites_max;
+			hor_len_min = hor_len_max;
+			ver_len_min = ver_len_max;
 		}
 	}
 	i = cell->symbol != SYMBOL_WHITE || node_hor->letters->symbol != SYMBOL_BLACK ? 0:1;
@@ -489,14 +489,14 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 	if (linear_blacks) {
 		++pos;
 	}
-	blacks2_in_col = blacks2_in_cols[cell->col];
-	blacks_n2 -= blacks2_in_col;
+	blacks2_lo_col = blacks2_lo_cols[cell->col];
+	blacks2_n -= blacks2_lo_col;
 	for (i = choices_lo, j = 0, r = 0; i < choices_hi && j < choices_max && !r; ++i) {
 		copy_choice(cell, choices+i);
 		if (cell->letter_hor->symbol != SYMBOL_BLACK) {
-			blacks2_in_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+black_counts[cell->row+cell->letter_ver->len_max]:0;
-			blacks_n2 += blacks2_in_cols[cell->col];
-			if (blacks_n1+blacks_n2 <= blacks_max) {
+			blacks2_lo_cols[cell->col] = cell->row+cell->letter_ver->len_max < rows_n ? 1+blacks2_lo[cell->row+cell->letter_ver->len_max]:0;
+			blacks2_n += blacks2_lo_cols[cell->col];
+			if (blacks1_n+blacks2_n <= blacks_max) {
 				if (connected_whites) {
 					if (!whites_n) {
 						first_white = cell;
@@ -546,18 +546,18 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 		}
 		else {
-			blacks2_in_cols[cell->col] = black_counts[cell->row];
-			blacks_n2 += blacks2_in_cols[cell->col];
-			++blacks_n1;
+			blacks2_lo_cols[cell->col] = blacks2_lo[cell->row];
+			blacks2_n += blacks2_lo_cols[cell->col];
+			++blacks1_n;
 			if (sym_blacks) {
 				if (cell->sym180 > cell) {
-					++blacks_n3;
+					++blacks3_n;
 				}
 				else if (cell->sym180 < cell) {
-					--blacks_n3;
+					--blacks3_n;
 				}
 			}
-			if (blacks_n1+blacks_n2 <= blacks_max && (!sym_blacks || blacks_n1+blacks_n3 <= blacks_max) && (!linear_blacks || (double)blacks_n1 <= blacks_ratio*pos)) {
+			if (blacks1_n+blacks2_n <= blacks_max && (!sym_blacks || blacks1_n+blacks3_n <= blacks_max) && (!linear_blacks || (double)blacks1_n <= blacks_ratio*pos)) {
 				if (!sym_blacks || cell->sym180 >= cell) {
 					cell->symbol = SYMBOL_BLACK;
 				}
@@ -584,18 +584,18 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 			}
 			if (sym_blacks) {
 				if (cell->sym180 > cell) {
-					--blacks_n3;
+					--blacks3_n;
 				}
 				else if (cell->sym180 < cell) {
-					++blacks_n3;
+					++blacks3_n;
 				}
 			}
-			--blacks_n1;
+			--blacks1_n;
 		}
-		blacks_n2 -= blacks2_in_cols[cell->col];
+		blacks2_n -= blacks2_lo_cols[cell->col];
 	}
-	blacks_n2 += blacks2_in_col;
-	blacks2_in_cols[cell->col] = blacks2_in_col;
+	blacks2_n += blacks2_lo_col;
+	blacks2_lo_cols[cell->col] = blacks2_lo_col;
 	if (linear_blacks) {
 		--pos;
 	}
@@ -606,11 +606,11 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 }
 
 static int check_letters(const letter_t *letter_hor, const letter_t *letter_ver) {
-	return letter_hor->leaves_n && letter_hor->len_min <= hor_whites_max && letter_hor->len_max >= hor_whites_min && letter_ver->leaves_n && letter_ver->len_min <= ver_whites_max && letter_ver->len_max >= ver_whites_min;
+	return letter_hor->leaves_n && letter_hor->len_min <= hor_len_max && letter_hor->len_max >= hor_len_min && letter_ver->leaves_n && letter_ver->len_min <= ver_len_max && letter_ver->len_max >= ver_len_min;
 }
 
 static int check_letter(const letter_t *letter) {
-	return letter->leaves_n > 1 && letter->len_min <= hor_whites_max && letter->len_max >= hor_whites_min && letter->len_min <= ver_whites_max && letter->len_max >= ver_whites_min;
+	return letter->leaves_n > 1 && letter->len_min <= hor_len_max && letter->len_max >= hor_len_min && letter->len_min <= ver_len_max && letter->len_max >= ver_len_min;
 }
 
 static int add_choice(letter_t *letter_hor, letter_t *letter_ver) {
@@ -659,33 +659,33 @@ static void copy_choice(cell_t *cell, choice_t *choice) {
 
 static int are_whites_connected(int target) {
 	int i;
-	if (!target || (sym_blacks && blacks_n1 > blacks_n3+2)) {
+	if (!target || (sym_blacks && blacks1_n > blacks3_n+2)) {
 		return 1;
 	}
-	queued_cells_n = 0;
-	add_cell_to_queue(first_white);
-	for (i = 0; i < queued_cells_n; ++i) {
-		if (queued_cells[i]->symbol != SYMBOL_UNKNOWN) {
+	marked_cells_n = 0;
+	add_marked_cell(first_white);
+	for (i = 0; i < marked_cells_n; ++i) {
+		if (marked_cells[i]->symbol != SYMBOL_UNKNOWN) {
 			--target;
 			if (!target) {
 				break;
 			}
 		}
-		add_cell_to_queue(queued_cells[i]+1);
-		add_cell_to_queue(queued_cells[i]+cols_total);
-		add_cell_to_queue(queued_cells[i]-1);
-		add_cell_to_queue(queued_cells[i]-cols_total);
+		add_marked_cell(marked_cells[i]+1);
+		add_marked_cell(marked_cells[i]+cols_total);
+		add_marked_cell(marked_cells[i]-1);
+		add_marked_cell(marked_cells[i]-cols_total);
 	}
-	for (i = queued_cells_n; i--; ) {
-		queued_cells[i]->visited = 0;
+	for (i = marked_cells_n; i--; ) {
+		marked_cells[i]->marked = 0;
 	}
 	return !target;
 }
 
-static void add_cell_to_queue(cell_t *cell) {
-	if (cell->symbol != SYMBOL_BLACK && !cell->visited) {
-		cell->visited = 1;
-		queued_cells[queued_cells_n++] = cell;
+static void add_marked_cell(cell_t *cell) {
+	if (cell->symbol != SYMBOL_BLACK && !cell->marked) {
+		cell->marked = 1;
+		marked_cells[marked_cells_n++] = cell;
 	}
 }
 

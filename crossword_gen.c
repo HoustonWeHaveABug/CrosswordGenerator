@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <time.h>
-#include <limits.h>
 #include "mtrand.h"
 
 #define HALF_BITS 4
@@ -15,8 +14,9 @@
 #define SYMBOL_WHITE '*'
 
 typedef enum {
-	HEURISTIC_FREQUENCY,
-	HEURISTIC_RANDOM
+	HEURISTIC_WEIGHT,
+	HEURISTIC_WEIGHTED_SHUFFLE,
+	HEURISTIC_SHUFFLE
 }
 heuristic_t;
 
@@ -53,7 +53,7 @@ struct cell_s {
 typedef struct {
 	letter_t *letter_hor;
 	letter_t *letter_ver;
-	int leaves_n;
+	int weight;
 }
 choice_t;
 
@@ -74,7 +74,6 @@ static int check_letters(const letter_t *, const letter_t *);
 static int check_letter(const letter_t *);
 static int add_choice(letter_t *, letter_t *);
 static void set_choice(choice_t *, letter_t *, letter_t *);
-static int multiply_ints(int, int);
 static int compare_choices(const void *, const void *);
 static void copy_choice(cell_t *, choice_t *);
 static int are_whites_connected(int);
@@ -158,9 +157,9 @@ int main(int argc, char *argv[]) {
 		blacks2_all[rows_n+i] = (cols_n-i-1)/(letter_root.len_max+1);
 	}
 	blacks2_rows = blacks2_all+rows_n+cols_n;
-	set_blacks2(blacks2_rows, cols_n, rows_n);
+	set_blacks2(blacks2_rows, rows_n, cols_n/(letter_root.len_max+1));
 	blacks2_cols = blacks2_rows+rows_n;
-	set_blacks2(blacks2_cols, rows_n, cols_n);
+	set_blacks2(blacks2_cols, cols_n, rows_n/(letter_root.len_max+1));
 	cells_n = rows_n*cols_n;
 	marked_cells = malloc(sizeof(cell_t *)*(size_t)cells_n);
 	if (!marked_cells) {
@@ -184,10 +183,10 @@ int main(int argc, char *argv[]) {
 	if (scanf("%lu", &mtseed) != 1) {
 		mtseed = (unsigned long)time(NULL);
 	}
+	smtrand(mtseed);
 	do {
 		printf("CHOICES %d\n", choices_max);
 		fflush(stdout);
-		smtrand(mtseed);
 		partial = 0;
 		r = solve_grid(cells+cols_total+1);
 		++choices_max;
@@ -207,7 +206,7 @@ static void expected_parameters(void) {
 	fprintf(stderr, "- Number of columns (>= Number of rows, Number of cells <= %d)\n", cells_max);
 	fputs("- Minimum number of black squares (>= 0)\n", stderr);
 	fputs("- Maximum number of black squares (>= Minimum number of black squares, <= Number of cells)\n", stderr);
-	fprintf(stderr, "- Heuristic (%u: frequency, %u: random, > %u: none)\n", HEURISTIC_FREQUENCY, HEURISTIC_RANDOM, HEURISTIC_RANDOM);
+	fprintf(stderr, "- Heuristic (%u: weight, %u: weighted shuffle, %u: shuffle, > %u: none)\n", HEURISTIC_WEIGHT, HEURISTIC_WEIGHTED_SHUFFLE, HEURISTIC_SHUFFLE, HEURISTIC_SHUFFLE);
 	fputs("- Options (= sum of the below flags)\n", stderr);
 	fprintf(stderr, "\t- Symmetric black squares (0: disabled, %d: enabled)\n", OPTION_SYM_BLACKS);
 	fprintf(stderr, "\t- Connected white squares (0: disabled, %d: enabled)\n", OPTION_CONNECTED_WHITES);
@@ -385,11 +384,10 @@ static void set_cell(cell_t *cell, int row, int col, int symbol) {
 	cell->marked = 0;
 }
 
-static void set_blacks2(int *blacks2, int len, int n) {
+static void set_blacks2(int *blacks2, int size, int n) {
 	int i;
-	*blacks2 = len/(letter_root.len_max+1);
-	for (i = 1; i < n; ++i) {
-		blacks2[i] = blacks2[i-1];
+	for (i = size; i--; ) {
+		blacks2[i] = n;
 	}
 }
 
@@ -485,10 +483,10 @@ static int solve_cell(cell_t *cell, const node_t *node_hor, const node_t *node_v
 		return 0;
 	}
 	if (r > 1) {
-		if (heuristic == HEURISTIC_FREQUENCY) {
+		if (heuristic == HEURISTIC_WEIGHT || heuristic == HEURISTIC_WEIGHTED_SHUFFLE) {
 			qsort(choices+choices_lo, (size_t)r, sizeof(choice_t), compare_choices);
 		}
-		else if (heuristic == HEURISTIC_RANDOM) {
+		else if (heuristic == HEURISTIC_SHUFFLE) {
 			for (i = choices_lo; i < choices_hi; ++i) {
 				choice_t choice_tmp = choices[i];
 				j = (int)emtrand((unsigned long)(choices_hi-i))+i;
@@ -653,22 +651,18 @@ static int add_choice(letter_t *letter_hor, letter_t *letter_ver) {
 static void set_choice(choice_t *choice, letter_t *letter_hor, letter_t *letter_ver) {
 	choice->letter_hor = letter_hor;
 	choice->letter_ver = letter_ver;
-	if (heuristic == HEURISTIC_FREQUENCY) {
-		choice->leaves_n = letter_hor->symbol != SYMBOL_BLACK ? multiply_ints(letter_hor->leaves_n, letter_ver->leaves_n):1;
+	if (heuristic == HEURISTIC_WEIGHT) {
+		choice->weight = letter_hor->symbol != SYMBOL_BLACK ? letter_hor->leaves_n+letter_ver->leaves_n:1;
 	}
-}
-
-static int multiply_ints(int a, int b) {
-	if (a <= INT_MAX/b) {
-		return a*b;
+	else if (heuristic == HEURISTIC_WEIGHTED_SHUFFLE) {
+		choice->weight = letter_hor->symbol != SYMBOL_BLACK ? (int)emtrand((unsigned long)(letter_hor->leaves_n+letter_ver->leaves_n)):0;
 	}
-	return INT_MAX;
 }
 
 static int compare_choices(const void *a, const void *b) {
 	const choice_t *choice_a = (const choice_t *)a, *choice_b = (const choice_t *)b;
-	if (choice_a->leaves_n != choice_b->leaves_n) {
-		return choice_b->leaves_n-choice_a->leaves_n;
+	if (choice_a->weight != choice_b->weight) {
+		return choice_b->weight-choice_a->weight;
 	}
 	return choice_b->letter_hor->symbol-choice_a->letter_hor->symbol;
 }

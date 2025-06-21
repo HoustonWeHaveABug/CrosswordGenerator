@@ -8,7 +8,7 @@ The following parameters are expected on the standard input:
 - Number of columns (>= Number of rows, Number of cells <= 65536)
 - Minimum number of black squares (>= 0)
 - Maximum number of black squares (>= Minimum number of black squares, <= Number of cells)
-- Heuristic (0: frequency, 1: random, > 1: none)
+- Heuristic (0: weight, 1: weighted shuffle, 2: shuffle, > 2: none)
 - Options (= sum of the below flags)
   - Symmetric black squares (0: disabled, 1: enabled)
   - Connected white squares (0: disabled, 2: enabled)
@@ -28,7 +28,7 @@ The program generates a trie from the list of words provided. The crossword is g
 
 When a valid solution is found, the current number of black squares - 1 becomes the new maximum. If the new maximum is less than the minimum number of black squares then the program terminates, otherwise another solution is searched using the new maximum. A solution is valid if all the words found are in the list of words (including one-letter words), and there is no duplicate words on the grid.
 
-When the Frequency heuristic is used, the program will sort the list of possible choices at each cell using their frequency of usage. When the Random heuristic is used, a shuffle of those choices is performed.
+When the Weight heuristic is used, the program will sort the list of possible choices at each cell using the sum of the weights for the current horizontal and vertical nodes in the trie. When the Weighted Shuffle heuristic is used, the program will sort the list of possible choices using a random number between 0 and the sum of their weights (excluded). When the Shuffle heuristic is used, a shuffle of the possible choices is performed.
 
 When the Symmetric black squares option is enabled, the program will ensure black squares are placed respecting the 180-degree rotational symmetry constraint. Otherwise there is no constraint on the placement of black squares.
 
